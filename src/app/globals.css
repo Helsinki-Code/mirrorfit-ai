@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --app: #f6f7fb;
+  --panel: #ffffff;
+  --surface: #eef1f8;
+  --hover: #e4e9f3;
+  --text: #1d2433;
+  --text-strong: #0d1320;
+  --muted: #5f6779;
+  --border: #d3dae8;
+  --primary: #4f46e5;
+  --danger: #dc2626;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-app: var(--app);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-hover: var(--hover);
+  --color-text: var(--text);
+  --color-text-strong: var(--text-strong);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-danger: var(--danger);
+  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="dark"] {
+  --app: #0f1524;
+  --panel: #151d30;
+  --surface: #1e2941;
+  --hover: #26334f;
+  --text: #d7dfef;
+  --text-strong: #f3f6ff;
+  --muted: #98a4bf;
+  --border: #2f3c5e;
+  --primary: #7c83ff;
+  --danger: #fb7185;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--app);
+  color: var(--text);
+  font-family: var(--font-sans);
+  transition:
+    background-color 350ms ease,
+    color 350ms ease,
+    border-color 350ms ease,
+    box-shadow 350ms ease;
+}
+
+* {
+  border-color: var(--border);
+}
+
+input,
+textarea,
+select {
+  background-color: var(--surface);
+  color: var(--text-strong);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--primary) 30%, transparent);
+}
+
+.card {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.subtle-input {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-strong);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+}
+
+.subtle-input:focus {
+  outline: 2px solid color-mix(in oklab, var(--primary) 60%, white 40%);
+  outline-offset: 1px;
+}
+
+.pill-btn {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  transition: background-color 200ms ease;
+}
+
+.pill-btn:hover {
+  background: var(--hover);
 }
