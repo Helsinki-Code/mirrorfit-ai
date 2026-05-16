@@ -201,7 +201,6 @@ export async function POST(request: Request) {
       size: "auto",
       quality: "auto",
       background: "auto",
-      moderation: "low",
     });
 
     const b64 = imageResponse.data?.[0]?.b64_json;
