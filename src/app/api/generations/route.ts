@@ -50,6 +50,41 @@ function isOpenAISexualSafetyBlock(error: unknown) {
   );
 }
 
+type ReferenceRecord = {
+  downloadUrl?: string;
+  imageType?: string;
+  createdAt?: number;
+};
+
+const MODEL_REFERENCE_PRIORITY: Record<string, number> = {
+  face: 0,
+  front_body: 1,
+  side_body: 2,
+  back_body: 3,
+  pose: 4,
+  closeup: 5,
+};
+
+const GARMENT_REFERENCE_PRIORITY: Record<string, number> = {
+  front: 0,
+  flat_lay: 1,
+  back: 2,
+  detail: 3,
+  transparent_png: 4,
+};
+
+function sortByReferencePriority(
+  records: ReferenceRecord[],
+  priorityMap: Record<string, number>,
+) {
+  return [...records].sort((a, b) => {
+    const aPriority = priorityMap[a.imageType ?? ""] ?? 99;
+    const bPriority = priorityMap[b.imageType ?? ""] ?? 99;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireServerUser();
@@ -158,48 +193,90 @@ export async function POST(request: Request) {
 
     await generationRef.update({ status: "generating", updatedAt: nowUnixMs() });
 
-    const basePrompt = buildGenerationPrompt({
-      request: payload,
-      model,
-      garment,
-      referenceImageCount: referencesSnap.size,
-      referenceImageUrls: referencesSnap.docs
-        .map((doc) => String(doc.data().downloadUrl ?? ""))
-        .filter(Boolean)
-        .slice(0, 8),
-      garmentImageUrls: garmentImagesSnap.docs
-        .map((doc) => String(doc.data().downloadUrl ?? ""))
-        .filter(Boolean)
-        .slice(0, 8),
-    });
-    const prompt = `${sanitizeCommercialPrompt(basePrompt)}\nStrict tone: fully clothed adult, non-explicit, non-pornographic, product-focused commercial fashion catalogue framing.`;
-
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const modelName = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
 
-    const modelReferenceUrls = referencesSnap.docs
-      .map((doc) => String(doc.data().downloadUrl ?? ""))
-      .filter(Boolean);
-    const garmentReferenceUrls = garmentImagesSnap.docs
-      .map((doc) => String(doc.data().downloadUrl ?? ""))
-      .filter(Boolean);
+    const modelReferencesSorted = sortByReferencePriority(
+      referencesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
+      MODEL_REFERENCE_PRIORITY,
+    );
+    const garmentReferencesSorted = sortByReferencePriority(
+      garmentImagesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
+      GARMENT_REFERENCE_PRIORITY,
+    );
 
-    if (modelReferenceUrls.length === 0 || garmentReferenceUrls.length === 0) {
+    const modelReferenceTypes = modelReferencesSorted
+      .map((entry) => entry.imageType ?? "")
+      .filter(Boolean);
+    const hasFace = modelReferenceTypes.includes("face");
+    const hasFrontBody = modelReferenceTypes.includes("front_body");
+    const hasSideBody = modelReferenceTypes.includes("side_body");
+
+    if (!hasFace || !hasFrontBody || !hasSideBody) {
       await generationRef.update({
         status: "failed",
         errorMessage:
-          "Missing model references or garment images. Upload both before generating.",
+          "For strong identity lock, upload at least face, front_body, and side_body references.",
         updatedAt: nowUnixMs(),
       });
       return NextResponse.json(
-        { error: "Missing model references or garment images." },
+        {
+          error:
+            "Please upload required model references: face + full-body front + full-body side.",
+          code: "insufficient_model_references",
+        },
         { status: 400 },
       );
     }
 
+    const modelReferenceUrls = modelReferencesSorted
+      .map((entry) => String(entry.downloadUrl ?? ""))
+      .filter(Boolean)
+      .slice(0, 5);
+    const garmentReferenceUrls = garmentReferencesSorted
+      .map((entry) => String(entry.downloadUrl ?? ""))
+      .filter(Boolean)
+      .slice(0, 3);
+    const garmentReferenceTypes = garmentReferencesSorted
+      .map((entry) => entry.imageType ?? "")
+      .filter(Boolean)
+      .slice(0, 3);
+
+    const hasPrimaryGarmentRef =
+      garmentReferenceTypes.includes("front") || garmentReferenceTypes.includes("flat_lay");
+
+    if (modelReferenceUrls.length === 0 || garmentReferenceUrls.length === 0 || !hasPrimaryGarmentRef) {
+      await generationRef.update({
+        status: "failed",
+        errorMessage:
+          "Missing primary garment reference image (front or flat-lay).",
+        updatedAt: nowUnixMs(),
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Please upload at least one primary garment reference image (front view or flat-lay).",
+          code: "insufficient_garment_references",
+        },
+        { status: 400 },
+      );
+    }
+
+    const basePrompt = buildGenerationPrompt({
+      request: payload,
+      model,
+      garment,
+      referenceImageCount: modelReferenceUrls.length,
+      referenceImageUrls: modelReferenceUrls,
+      garmentImageUrls: garmentReferenceUrls,
+      modelReferenceTypes,
+      garmentReferenceTypes,
+    });
+    const prompt = `${sanitizeCommercialPrompt(basePrompt)}\nStrict tone: fully clothed adult, non-explicit, non-pornographic, product-focused commercial fashion catalogue framing.\nIdentity and body lock are mandatory and take priority over stylistic variation.`;
+
     const imageSources = [
       ...modelReferenceUrls.slice(0, 4),
-      ...garmentReferenceUrls.slice(0, 4),
+      ...garmentReferenceUrls.slice(0, 2),
     ];
     const imageFiles = await Promise.all(
       imageSources.map(async (url, index) => {
