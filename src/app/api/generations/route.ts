@@ -30,6 +30,26 @@ function extensionFromMime(mimeType: string) {
   return "png";
 }
 
+function sanitizeCommercialPrompt(prompt: string) {
+  return prompt
+    .replace(/\bsexy\b/gi, "commercial fashion")
+    .replace(/\bseductive\b/gi, "product-focused")
+    .replace(/\berotic\b/gi, "editorial fashion")
+    .replace(/\bhot\b/gi, "professional")
+    .replace(/\blingerie\b/gi, "sleepwear fashion")
+    .replace(/\bnude|nudity|naked\b/gi, "fully clothed")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isOpenAISexualSafetyBlock(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    /safety_violations=\[sexual\]/i.test(error.message) ||
+    /request was rejected by the safety system/i.test(error.message)
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireServerUser();
@@ -138,7 +158,7 @@ export async function POST(request: Request) {
 
     await generationRef.update({ status: "generating", updatedAt: nowUnixMs() });
 
-    const prompt = buildGenerationPrompt({
+    const basePrompt = buildGenerationPrompt({
       request: payload,
       model,
       garment,
@@ -152,6 +172,7 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .slice(0, 8),
     });
+    const prompt = `${sanitizeCommercialPrompt(basePrompt)}\nStrict tone: fully clothed adult, non-explicit, non-pornographic, product-focused commercial fashion catalogue framing.`;
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const modelName = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
@@ -193,15 +214,36 @@ export async function POST(request: Request) {
       }),
     );
 
-    const imageResponse = await openai.images.edit({
-      model: modelName,
-      image: imageFiles,
-      prompt,
-      n: 1,
-      size: "auto",
-      quality: "auto",
-      background: "auto",
-    });
+    let imageResponse;
+    try {
+      imageResponse = await openai.images.edit({
+        model: modelName,
+        image: imageFiles,
+        prompt,
+        n: 1,
+        size: "auto",
+        quality: "auto",
+        background: "auto",
+      });
+    } catch (apiError) {
+      if (isOpenAISexualSafetyBlock(apiError)) {
+        await generationRef.update({
+          status: "failed",
+          errorMessage:
+            "Generation blocked by safety filter. Use neutral model references (front/side/full-body), avoid intimate/romantic shots, and keep prompts strictly product-catalog.",
+          updatedAt: nowUnixMs(),
+        });
+        return NextResponse.json(
+          {
+            error:
+              "Generation was blocked by safety filters. Please use neutral studio-style model references and product-focused prompt language.",
+            code: "safety_blocked",
+          },
+          { status: 400 },
+        );
+      }
+      throw apiError;
+    }
 
     const b64 = imageResponse.data?.[0]?.b64_json;
     if (!b64) {
