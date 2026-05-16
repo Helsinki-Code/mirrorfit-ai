@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { z } from "zod";
 import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireServerUser } from "@/lib/server-auth";
 import { classifySafety } from "@/lib/safety";
-import type { CreateGenerationRequest, Garment, Generation, ModelProfile } from "@/lib/types";
+import type { Garment, Generation, ModelProfile } from "@/lib/types";
 import { nowUnixMs } from "@/lib/utils/time";
 
 const requestSchema = z.object({
@@ -20,14 +20,14 @@ const requestSchema = z.object({
   prompt: z.string().min(10),
 });
 
-function ratioToSize(ratio: CreateGenerationRequest["outputRatio"]) {
-  if (ratio === "16:9") return "1536x1024";
-  if (ratio === "1:1") return "1024x1024";
-  return "1024x1536";
-}
-
 function emitTelemetry(event: string, payload: Record<string, unknown>) {
   console.info(`[mirrorfit-telemetry] ${event}`, payload);
+}
+
+function extensionFromMime(mimeType: string) {
+  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg";
+  if (mimeType.includes("webp")) return "webp";
+  return "png";
 }
 
 export async function POST(request: Request) {
@@ -156,11 +156,52 @@ export async function POST(request: Request) {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const modelName = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
 
-    const imageResponse = await openai.images.generate({
+    const modelReferenceUrls = referencesSnap.docs
+      .map((doc) => String(doc.data().downloadUrl ?? ""))
+      .filter(Boolean);
+    const garmentReferenceUrls = garmentImagesSnap.docs
+      .map((doc) => String(doc.data().downloadUrl ?? ""))
+      .filter(Boolean);
+
+    if (modelReferenceUrls.length === 0 || garmentReferenceUrls.length === 0) {
+      await generationRef.update({
+        status: "failed",
+        errorMessage:
+          "Missing model references or garment images. Upload both before generating.",
+        updatedAt: nowUnixMs(),
+      });
+      return NextResponse.json(
+        { error: "Missing model references or garment images." },
+        { status: 400 },
+      );
+    }
+
+    const imageSources = [
+      ...modelReferenceUrls.slice(0, 4),
+      ...garmentReferenceUrls.slice(0, 4),
+    ];
+    const imageFiles = await Promise.all(
+      imageSources.map(async (url, index) => {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch reference image: ${response.status}`);
+        }
+        const contentType = response.headers.get("content-type") ?? "image/png";
+        const bytes = Buffer.from(await response.arrayBuffer());
+        const ext = extensionFromMime(contentType);
+        return await toFile(bytes, `reference-${index}.${ext}`, { type: contentType });
+      }),
+    );
+
+    const imageResponse = await openai.images.edit({
       model: modelName,
+      image: imageFiles,
       prompt,
-      size: ratioToSize(payload.outputRatio),
-      quality: "high",
+      n: 1,
+      size: "auto",
+      quality: "auto",
+      background: "auto",
+      moderation: "low",
     });
 
     const b64 = imageResponse.data?.[0]?.b64_json;
