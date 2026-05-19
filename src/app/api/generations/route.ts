@@ -4,6 +4,7 @@ import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
 import { runGenerationOrchestrator } from "@/lib/orchestrator";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { setDocSafe, updateDocSafe } from "@/lib/server/firestore-write";
 import { requireServerUser } from "@/lib/server-auth";
 import { classifySafety } from "@/lib/safety";
 import type {
@@ -92,7 +93,12 @@ async function writeMessage(params: {
     imageUrl: params.imageUrl,
     createdAt: now,
   };
-  await params.adminDb.collection("shoot_messages").doc(id).set(message);
+  await setDocSafe({
+    docRef: params.adminDb.collection("shoot_messages").doc(id),
+    collection: "shoot_messages",
+    docId: id,
+    data: message,
+  });
   return message;
 }
 
@@ -143,7 +149,12 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
       };
-      await adminDb.collection("shoot_jobs").doc(shootJobId).set(newJob);
+      await setDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: newJob,
+      });
     } else {
       const existing = await adminDb.collection("shoot_jobs").doc(shootJobId).get();
       if (!existing.exists || existing.data()?.userId !== user.uid) {
@@ -152,11 +163,16 @@ export async function POST(request: Request) {
           { status: 404 },
         );
       }
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         modelProfileId: selectedModelProfileId ?? existing.data()?.modelProfileId,
         garmentId: selectedGarmentId ?? existing.data()?.garmentId,
         lastMessage: payload.userMessage,
         updatedAt: now,
+        },
       });
     }
 
@@ -173,9 +189,14 @@ export async function POST(request: Request) {
     if (!selectedGarmentId) missing.push("garment");
 
     if (missing.length > 0) {
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         status: "needs_input",
         updatedAt: nowUnixMs(),
+        },
       });
       const message = `I need ${missing.join(" and ")} to continue. Please select them and I will generate immediately.`;
       await writeMessage({
@@ -210,9 +231,14 @@ export async function POST(request: Request) {
     ]);
 
     if (!modelSnap.exists || !garmentSnap.exists) {
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         status: "needs_input",
         updatedAt: nowUnixMs(),
+        },
       });
       return NextResponse.json({
         status: "needs_input",
@@ -235,9 +261,14 @@ export async function POST(request: Request) {
     ) {
       const message =
         "This model is not in your approved model set. Add it in Brand Memory or select another model.";
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         status: "needs_input",
         updatedAt: nowUnixMs(),
+        },
       });
       await writeMessage({
         adminDb,
@@ -257,9 +288,14 @@ export async function POST(request: Request) {
     if (safety.decision === "reject") {
       const message =
         "I cannot generate this as written. I can still help by turning it into a safe, professional fashion catalogue request.";
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         status: "needs_input",
         updatedAt: nowUnixMs(),
+        },
       });
       await writeMessage({
         adminDb,
@@ -304,9 +340,14 @@ export async function POST(request: Request) {
     if (!hasFace || !hasFrontBody || !hasSideBody || !hasPrimaryGarment) {
       const message =
         "Before generating, please upload required references: model face + full-body front + full-body side, and one garment front/flat-lay image.";
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         status: "needs_input",
         updatedAt: nowUnixMs(),
+        },
       });
       await writeMessage({
         adminDb,
@@ -365,11 +406,21 @@ export async function POST(request: Request) {
       createdAt: nowUnixMs(),
       updatedAt: nowUnixMs(),
     };
-    await generationRef.set(generation);
-    await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+    await setDocSafe({
+      docRef: generationRef,
+      collection: "generations",
+      docId: generationId,
+      data: generation,
+    });
+    await updateDocSafe({
+      docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+      collection: "shoot_jobs",
+      docId: shootJobId,
+      data: {
       status: "working",
       latestGenerationId: generationId,
       updatedAt: nowUnixMs(),
+      },
     });
 
     const orchestrated = await runGenerationOrchestrator({
@@ -385,15 +436,25 @@ export async function POST(request: Request) {
     });
 
     if (orchestrated.state === "failed" || !orchestrated.finalOutputUrl) {
-      await generationRef.update({
+      await updateDocSafe({
+        docRef: generationRef,
+        collection: "generations",
+        docId: generationId,
+        data: {
         status: "failed",
         errorMessage: orchestrated.userFacingMessage,
         updatedAt: nowUnixMs(),
         attempts: orchestrated.attempts,
+        },
       });
-      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      await updateDocSafe({
+        docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+        collection: "shoot_jobs",
+        docId: shootJobId,
+        data: {
         status: "failed",
         updatedAt: nowUnixMs(),
+        },
       });
       await writeMessage({
         adminDb,
@@ -432,18 +493,28 @@ export async function POST(request: Request) {
       expires: "03-01-2500",
     });
 
-    await generationRef.update({
+    await updateDocSafe({
+      docRef: generationRef,
+      collection: "generations",
+      docId: generationId,
+      data: {
       status: "completed",
       outputPath,
       outputUrl: signedUrl,
       updatedAt: nowUnixMs(),
       attempts: orchestrated.attempts,
+      },
     });
-    await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+    await updateDocSafe({
+      docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
+      collection: "shoot_jobs",
+      docId: shootJobId,
+      data: {
       status: "completed",
       latestGenerationId: generationId,
       latestOutputUrl: signedUrl,
       updatedAt: nowUnixMs(),
+      },
     });
     await writeMessage({
       adminDb,

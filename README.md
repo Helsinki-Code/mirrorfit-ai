@@ -63,6 +63,26 @@ Open [http://localhost:3000](http://localhost:3000).
 - `GET /api/generations/:id` (auth required)
 - `POST /api/uploads/sign` (auth required)
 
+## Firestore Write Contract
+- Optional fields must be omitted from persisted payloads (no `undefined` writes).
+- API handlers should sanitize payloads with:
+  - `setDocSafe(...)`
+  - `updateDocSafe(...)`
+- Utility locations:
+  - `src/lib/utils/firestore-sanitize.ts`
+  - `src/lib/server/firestore-write.ts`
+
+## SEO/Content Sources (Canonical)
+- Strategy + keyword mapping:
+  - `mirrorfit-ai-seo-strategy.md`
+  - `mirrorfit-seo-strategy.csv`
+- Messaging alignment:
+  - `product-marketing-context.md`
+  - `llms.txt`
+- Operationalized in code:
+  - `src/lib/seo/content-map.ts`
+  - Public guide routes under `src/app/*/page.tsx`
+
 ## Important Notes
 - This app expects all user-owned/authorized model references.
 - Model references required for generation: `face`, `front_body`, `side_body`.

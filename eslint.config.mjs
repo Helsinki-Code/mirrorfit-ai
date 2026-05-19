@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // External prototype file used only as content reference.
+    "mirrorfit-site.jsx",
   ]),
 ]);
 

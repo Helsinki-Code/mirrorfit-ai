@@ -3,8 +3,12 @@ import "./globals.css";
 import { AppProviders } from "@/providers/AppProviders";
 
 export const metadata: Metadata = {
-  title: "MirrorFit AI",
-  description: "Multi-model virtual try-on platform for fashion e-commerce",
+  title: {
+    default: "MirrorFit AI",
+    template: "%s | MirrorFit AI",
+  },
+  description:
+    "Chat-first virtual try-on platform for fashion ecommerce teams. Upload authorized model references, upload garments, and generate catalogue-ready visuals in minutes.",
 };
 
 export default function RootLayout({

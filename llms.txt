@@ -1,0 +1,61 @@
+# MirrorFit AI
+
+> Chat-first virtual try-on platform for fashion ecommerce teams. Generate catalogue-ready model-worn images from authorized model references and garment uploads.
+
+MirrorFit AI is a production assistant for fashion brands, boutique teams, and marketplace sellers. Users describe the shoot naturally in chat, while backend orchestration handles prompt cleanup, retry strategy, and consistency checks.
+
+## Who It's For
+
+- Fashion ecommerce stores and boutique brands
+- Swimwear, sleepwear, and shapewear sellers
+- Indian and ethnicwear sellers (sarees, lehengas, bridal blouses)
+- Marketplace sellers on Shopify, Amazon, Myntra, and Meesho
+- Catalogue teams and creative managers needing consistent model visuals at scale
+
+## Core Capability
+
+Upload model references and garment references, then generate realistic catalogue outputs with:
+
+- Face and body consistency enforcement
+- Garment fidelity checks for texture, seams, drape, and silhouette
+- Category-aware commercial fashion handling for adult, authorized workflows
+- Retry and fallback orchestration when a generation attempt fails
+
+## Product UX Model
+
+MirrorFit uses a beginner-first chat flow:
+
+1. Start a shoot thread from Shoot Inbox
+2. Describe desired output in plain language
+3. Provide only missing essentials (model profile, garment references)
+4. Receive generated outputs as in-thread assistant replies
+5. Use quick-fix chips for refinements and approval actions
+
+## Supported Commercial Categories
+
+Everyday fashion, luxury/editorial, Indian and ethnicwear, swimwear/resortwear, sleepwear, and shapewear/body-fitted fashion categories are supported for adult and authorized commercial use.
+
+## Pricing
+
+See `/pricing.md` for machine-readable plan details.
+
+## Canonical Public Pages
+
+- `/how-it-works`
+- `/features`
+- `/pricing`
+- `/model-library`
+- `/ai-virtual-try-on-for-ecommerce`
+- `/ai-fashion-photography`
+- `/indian-fashion-ai-catalogue`
+- `/swimwear-ai-catalogue`
+- `/fashion-photoshoot-cost-india`
+- `/batch-generation-fashion`
+- `/model-identity-lock`
+- `/competitor-alternatives`
+- `/mirrorfit-ai-review`
+
+## Safety and Authorization Positioning
+
+MirrorFit is for professional fashion production. It supports adult commercial catalogue workflows and does not support explicit sexual content, minors, or non-consensual likeness usage.
+
