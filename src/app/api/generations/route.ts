@@ -34,6 +34,8 @@ const requestSchema = z.object({
     .optional(),
 });
 
+export const maxDuration = 300;
+
 type ReferenceRecord = {
   downloadUrl?: string;
   imageType?: string;
@@ -423,6 +425,12 @@ export async function POST(request: Request) {
       },
     });
 
+    const routeRetryCapRaw = Number(process.env.ORCH_ROUTE_RETRY_CAP ?? "4");
+    const routeRetryCap =
+      Number.isFinite(routeRetryCapRaw) && routeRetryCapRaw > 0
+        ? Math.min(Math.floor(routeRetryCapRaw), 8)
+        : 4;
+
     const orchestrated = await runGenerationOrchestrator({
       request: payload,
       basePrompt: `${basePrompt}${memoryPrompt}`,
@@ -432,7 +440,7 @@ export async function POST(request: Request) {
         garmentReferenceTypes,
         garmentReferenceUrls,
       },
-      retryCap: 8,
+      retryCap: routeRetryCap,
     });
 
     if (orchestrated.state === "failed" || !orchestrated.finalOutputUrl) {

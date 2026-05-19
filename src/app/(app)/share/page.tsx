@@ -29,16 +29,20 @@ export default function SharePage() {
   }, [jobId, user]);
 
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId || !user) return;
     return onSnapshot(
-      query(collection(db, "shoot_approvals"), where("jobId", "==", jobId)),
+      query(
+        collection(db, "shoot_approvals"),
+        where("jobId", "==", jobId),
+        where("userId", "==", user.uid),
+      ),
       (snapshot) => {
         const rows = snapshot.docs.map((entry) => entry.data() as ShootApproval);
         rows.sort((a, b) => b.createdAt - a.createdAt);
         setApprovals(rows);
       },
     );
-  }, [jobId]);
+  }, [jobId, user]);
 
   const selectedJob = useMemo(() => jobs.find((job) => job.id === jobId), [jobId, jobs]);
 

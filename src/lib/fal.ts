@@ -21,11 +21,24 @@ function getFalHeaders() {
   };
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 45_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function runFalGptImage2Edit(input: {
   prompt: string;
   imageUrls: string[];
 }) {
-  const response = await fetch(`${FAL_BASE}/openai/gpt-image-2/edit`, {
+  const response = await fetchWithTimeout(`${FAL_BASE}/openai/gpt-image-2/edit`, {
     method: "POST",
     headers: getFalHeaders(),
     body: JSON.stringify({
@@ -53,7 +66,7 @@ export async function runFalNanoBananaEdit(input: {
   prompt: string;
   imageUrls: string[];
 }) {
-  const response = await fetch(`${FAL_BASE}/fal-ai/nano-banana-pro/edit`, {
+  const response = await fetchWithTimeout(`${FAL_BASE}/fal-ai/nano-banana-pro/edit`, {
     method: "POST",
     headers: getFalHeaders(),
     body: JSON.stringify({
@@ -78,7 +91,7 @@ export async function runFalNanoBananaEdit(input: {
 }
 
 export async function runFalReveEdit(input: { prompt: string; imageUrl: string }) {
-  const response = await fetch(`${FAL_BASE}/fal-ai/reve/edit`, {
+  const response = await fetchWithTimeout(`${FAL_BASE}/fal-ai/reve/edit`, {
     method: "POST",
     headers: getFalHeaders(),
     body: JSON.stringify({

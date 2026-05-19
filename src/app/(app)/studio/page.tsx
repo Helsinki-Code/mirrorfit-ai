@@ -60,16 +60,20 @@ export default function StudioPage() {
   }, [garmentId, modelId, shootJobId, user]);
 
   useEffect(() => {
-    if (!shootJobId) return;
+    if (!shootJobId || !user) return;
     return onSnapshot(
-      query(collection(db, "shoot_messages"), where("jobId", "==", shootJobId)),
+      query(
+        collection(db, "shoot_messages"),
+        where("jobId", "==", shootJobId),
+        where("userId", "==", user.uid),
+      ),
       (snapshot) => {
         const rows = snapshot.docs.map((entry) => entry.data() as ShootMessage);
         rows.sort((a, b) => a.createdAt - b.createdAt);
         setMessages(rows);
       },
     );
-  }, [shootJobId]);
+  }, [shootJobId, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -96,24 +100,32 @@ export default function StudioPage() {
   }, [user]);
 
   useEffect(() => {
-    if (!modelId) return;
+    if (!modelId || !user) return;
     return onSnapshot(
-      query(collection(db, "model_reference_images"), where("modelId", "==", modelId)),
+      query(
+        collection(db, "model_reference_images"),
+        where("modelId", "==", modelId),
+        where("userId", "==", user.uid),
+      ),
       (snapshot) => {
         setModelRefs(snapshot.docs.map((entry) => entry.data() as ModelReferenceImage));
       },
     );
-  }, [modelId]);
+  }, [modelId, user]);
 
   useEffect(() => {
-    if (!garmentId) return;
+    if (!garmentId || !user) return;
     return onSnapshot(
-      query(collection(db, "garment_images"), where("garmentId", "==", garmentId)),
+      query(
+        collection(db, "garment_images"),
+        where("garmentId", "==", garmentId),
+        where("userId", "==", user.uid),
+      ),
       (snapshot) => {
         setGarmentRefs(snapshot.docs.map((entry) => entry.data() as GarmentImage));
       },
     );
-  }, [garmentId]);
+  }, [garmentId, user]);
 
   const latestImage = useMemo(() => {
     const imageMessage = [...messages].reverse().find((item) => item.imageUrl);
@@ -167,12 +179,20 @@ export default function StudioPage() {
         }),
       });
 
-      const data = (await response.json()) as {
+      const raw = await response.text();
+      let data = {} as {
         status?: string;
         error?: string;
         message?: string;
         missing?: string[];
       };
+      try {
+        data = JSON.parse(raw) as typeof data;
+      } catch {
+        if (!response.ok) {
+          throw new Error(`Generation failed (${response.status}). ${raw.slice(0, 220)}`);
+        }
+      }
       if (!response.ok || data.status === "failed") {
         throw new Error(data.error ?? data.message ?? "Generation failed.");
       }
