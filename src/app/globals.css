@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --app: #f6f7fb;
+  --app: #f4f6fb;
   --panel: #ffffff;
-  --surface: #eef1f8;
-  --hover: #e4e9f3;
-  --text: #1d2433;
-  --text-strong: #0d1320;
-  --muted: #5f6779;
-  --border: #d3dae8;
-  --primary: #4f46e5;
+  --surface: #f0f3f9;
+  --hover: #e8edf6;
+  --text: #1f2736;
+  --text-strong: #0f1626;
+  --muted: #5c667d;
+  --border: #d8dfea;
+  --primary: #4a58e8;
   --danger: #dc2626;
 }
 
@@ -29,15 +29,15 @@
 }
 
 [data-theme="dark"] {
-  --app: #0f1524;
-  --panel: #151d30;
-  --surface: #1e2941;
-  --hover: #26334f;
-  --text: #d7dfef;
-  --text-strong: #f3f6ff;
-  --muted: #98a4bf;
-  --border: #2f3c5e;
-  --primary: #7c83ff;
+  --app: #0b1220;
+  --panel: #111b2f;
+  --surface: #192640;
+  --hover: #213252;
+  --text: #dbe4f3;
+  --text-strong: #f4f7ff;
+  --muted: #9aa8c3;
+  --border: #2a3b5f;
+  --primary: #7787ff;
   --danger: #fb7185;
 }
 
@@ -70,15 +70,15 @@ select {
 .card {
   border: 1px solid var(--border);
   background: var(--panel);
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-radius: 0.625rem;
+  box-shadow: 0 6px 20px rgba(13, 25, 49, 0.08);
 }
 
 .subtle-input {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-strong);
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.6rem 0.75rem;
   width: 100%;
 }
@@ -90,7 +90,7 @@ select {
 
 .pill-btn {
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   background: var(--surface);
   color: var(--text);
   transition: background-color 200ms ease;

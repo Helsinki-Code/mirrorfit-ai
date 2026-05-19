@@ -25,6 +25,10 @@ export async function GET(
 
     const generation = snapshot.data() as Generation;
     if (generation.userId !== user.uid) {
+      console.warn("tenant.forbidden_generation_read", {
+        userId: user.uid,
+        generationId: id,
+      });
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 

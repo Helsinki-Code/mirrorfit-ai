@@ -170,6 +170,8 @@ export interface GenerationAttempt {
     bodyConsistency: number;
     garmentFidelity: number;
     catalogSuitability: number;
+    referenceCoverage: number;
+    identityDriftRisk: number;
     total: number;
   };
 }

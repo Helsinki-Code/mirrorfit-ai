@@ -36,15 +36,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-app transition-colors duration-500">
-      <div className="mx-auto flex w-full max-w-[1440px] gap-6 px-4 py-4 md:px-6 lg:px-8">
-        <aside className="hidden w-72 shrink-0 rounded-lg border border-border bg-panel p-4 shadow-sm md:block">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white">
+      <div className="mx-auto flex w-full max-w-[1500px] gap-5 px-4 py-4 md:px-6 lg:px-8">
+        <aside className="hidden w-72 shrink-0 rounded-xl border border-border bg-panel p-4 shadow-sm md:block">
+          <div className="mb-6 flex items-center gap-3 border-b border-border pb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/90 text-white">
               <Palette size={20} />
             </div>
             <div>
-              <p className="text-sm text-muted">MirrorFit AI</p>
-              <p className="text-sm font-semibold text-text">Virtual Try-On</p>
+              <p className="text-xs uppercase tracking-wide text-muted">MirrorFit AI</p>
+              <p className="text-sm font-semibold text-text">Virtual Try-On Studio</p>
             </div>
           </div>
 
@@ -57,9 +57,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     active
-                      ? "bg-primary text-white"
+                      ? "bg-primary text-white shadow-sm"
                       : "text-text hover:bg-surface hover:text-text-strong",
                   )}
                 >
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="mb-4 flex items-center justify-between rounded-lg border border-border bg-panel px-4 py-3 shadow-sm">
+          <header className="mb-4 flex items-center justify-between rounded-xl border border-border bg-panel px-4 py-3 shadow-sm">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted">Workspace</p>
               <h1 className="text-lg font-semibold text-text-strong">MirrorFit AI Assistant</h1>

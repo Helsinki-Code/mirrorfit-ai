@@ -229,10 +229,10 @@ export default function StudioPage() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+    <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
       <section className="space-y-4">
-        <div className="card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted">Chat Shoot Room</p>
+        <div className="card p-5">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted">Chat Shoot Room</p>
           <h2 className="mt-1 text-xl font-semibold text-text-strong">
             {job?.title ?? "Production Thread"}
           </h2>
@@ -242,13 +242,13 @@ export default function StudioPage() {
         </div>
 
         {missingCards.length > 0 ? (
-          <div className="card p-4">
+          <div className="card p-5">
             <h3 className="text-sm font-semibold text-text-strong">Missing Info Cards</h3>
             <div className="mt-3 grid gap-2">
               {missingCards.map((card) => (
                 <div
                   key={card}
-                  className="rounded-md border border-amber-500/40 bg-amber-100/30 px-3 py-2 text-sm text-text"
+                  className="rounded-lg border border-amber-500/35 bg-amber-100/25 px-3 py-2 text-sm text-text"
                 >
                   {card}
                 </div>
@@ -257,18 +257,18 @@ export default function StudioPage() {
           </div>
         ) : null}
 
-        <div className="card p-4">
-          <div className="space-y-3">
+        <div className="card p-5">
+          <div className="space-y-3.5">
             {messages.length === 0 ? (
               <p className="text-sm text-muted">No messages yet. Send your first shoot request.</p>
             ) : (
               messages.map((item) => (
                 <div
                   key={item.id}
-                  className={`rounded-md border px-3 py-2 text-sm ${
+                  className={`rounded-lg border px-3.5 py-3 text-sm ${
                     item.role === "user"
                       ? "border-border bg-surface text-text"
-                      : "border-primary/30 bg-primary/10 text-text-strong"
+                      : "border-primary/25 bg-primary/10 text-text-strong"
                   }`}
                 >
                   <p className="mb-1 text-xs uppercase tracking-wide text-muted">{item.role}</p>
@@ -279,7 +279,7 @@ export default function StudioPage() {
                       alt="Generated output"
                       width={600}
                       height={760}
-                      className="mt-3 h-auto w-full rounded-md border border-border object-cover shadow-[0_10px_28px_rgba(0,0,0,0.2)]"
+                      className="mt-3 h-auto w-full rounded-lg border border-border object-cover shadow-[0_14px_36px_rgba(4,12,24,0.22)]"
                     />
                   ) : null}
                 </div>
@@ -288,7 +288,7 @@ export default function StudioPage() {
           </div>
         </div>
 
-        <div className="card p-4">
+        <div className="card p-5">
           <div className="grid gap-2 sm:grid-cols-2">
             <select
               className="subtle-input"
@@ -327,7 +327,7 @@ export default function StudioPage() {
             type="button"
             onClick={submitMessage}
             disabled={working}
-            className="mt-3 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
           >
             {working ? "Working..." : "Generate"}
           </button>
@@ -335,23 +335,23 @@ export default function StudioPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="card p-4">
+        <div className="card p-5">
           <h3 className="text-base font-semibold text-text-strong">Result Message Thread</h3>
-          <div className="relative mt-3 flex min-h-[340px] items-center justify-center rounded-md border border-border bg-surface">
+          <div className="relative mt-3 flex min-h-[340px] items-center justify-center rounded-lg border border-border bg-surface">
             {latestImage ? (
               <Image
                 src={latestImage}
                 alt="Latest render"
                 width={540}
                 height={720}
-                className="h-auto max-h-[320px] w-auto rounded-md object-contain shadow-[0_16px_48px_rgba(0,0,0,0.2)]"
+                className="h-auto max-h-[320px] w-auto rounded-lg object-contain shadow-[0_18px_52px_rgba(5,14,30,0.25)]"
               />
             ) : (
               <p className="text-sm text-muted">Latest generated image appears here.</p>
             )}
             {working ? (
-              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/20 backdrop-blur-[1px]">
-                <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-xs text-text">
+              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 backdrop-blur-[1px]">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                   Generating...
                 </div>
@@ -360,7 +360,7 @@ export default function StudioPage() {
           </div>
         </div>
 
-        <div className="card p-4">
+        <div className="card p-5">
           <h3 className="text-base font-semibold text-text-strong">Quick Fix Chips</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {quickFixChips.map((chip) => (

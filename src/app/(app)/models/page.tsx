@@ -52,7 +52,7 @@ export default function ModelsPage() {
       (snapshot) => {
         const rows = snapshot.docs.map((doc) => doc.data() as ModelProfile);
         setModels(rows);
-        if (!selectedModelId && rows[0]) setSelectedModelId(rows[0].id);
+        setSelectedModelId((prev) => prev || rows[0]?.id || "");
       },
     );
     const unsubRefs = onSnapshot(
@@ -63,7 +63,7 @@ export default function ModelsPage() {
       unsubModels();
       unsubRefs();
     };
-  }, [selectedModelId, user]);
+  }, [user]);
 
   const createModel = async () => {
     if (!user || !name.trim()) return;

@@ -44,9 +44,9 @@ export default function GarmentsPage() {
       const items = snapshot.docs.map((entry) => entry.data() as Garment);
       items.sort((a, b) => b.createdAt - a.createdAt);
       setGarments(items);
-      if (!selectedGarmentId && items[0]) setSelectedGarmentId(items[0].id);
+      setSelectedGarmentId((prev) => prev || items[0]?.id || "");
     });
-  }, [selectedGarmentId, user]);
+  }, [user]);
 
   const createGarment = async () => {
     if (!user || !form.productName.trim()) return;

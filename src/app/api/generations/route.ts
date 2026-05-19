@@ -84,6 +84,16 @@ async function writeMessage(params: {
   content: string;
   imageUrl?: string;
 }) {
+  const jobSnap = await params.adminDb.collection("shoot_jobs").doc(params.jobId).get();
+  if (!jobSnap.exists || jobSnap.data()?.userId !== params.userId) {
+    console.warn("tenant.forbidden_job_message_write", {
+      userId: params.userId,
+      jobId: params.jobId,
+      role: params.role,
+    });
+    throw new Error("Forbidden job message write.");
+  }
+
   const id = crypto.randomUUID();
   const now = nowUnixMs();
   const message: ShootMessage = {
@@ -160,6 +170,10 @@ export async function POST(request: Request) {
     } else {
       const existing = await adminDb.collection("shoot_jobs").doc(shootJobId).get();
       if (!existing.exists || existing.data()?.userId !== user.uid) {
+        console.warn("tenant.forbidden_shoot_job_access", {
+          userId: user.uid,
+          shootJobId,
+        });
         return NextResponse.json(
           { status: "failed", error: "Shoot job not found or unauthorized." },
           { status: 404 },
@@ -225,10 +239,12 @@ export async function POST(request: Request) {
       adminDb
         .collection("model_reference_images")
         .where("modelId", "==", modelProfileId)
+        .where("userId", "==", user.uid)
         .get(),
       adminDb
         .collection("garment_images")
         .where("garmentId", "==", garmentId)
+        .where("userId", "==", user.uid)
         .get(),
     ]);
 
@@ -252,6 +268,11 @@ export async function POST(request: Request) {
     const model = modelSnap.data() as ModelProfile;
     const garment = garmentSnap.data() as Garment;
     if (model.userId !== user.uid || garment.userId !== user.uid) {
+      console.warn("tenant.forbidden_model_or_garment_access", {
+        userId: user.uid,
+        modelProfileId,
+        garmentId,
+      });
       return NextResponse.json(
         { status: "failed", error: "Unauthorized resource access." },
         { status: 403 },
@@ -314,15 +335,11 @@ export async function POST(request: Request) {
     }
 
     const modelReferencesSorted = sortByReferencePriority(
-      referencesSnap.docs
-        .map((doc) => doc.data() as ReferenceRecord & { userId?: string })
-        .filter((row) => row.userId === user.uid),
+      referencesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
       MODEL_REFERENCE_PRIORITY,
     );
     const garmentReferencesSorted = sortByReferencePriority(
-      garmentImagesSnap.docs
-        .map((doc) => doc.data() as ReferenceRecord & { userId?: string })
-        .filter((row) => row.userId === user.uid),
+      garmentImagesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
       GARMENT_REFERENCE_PRIORITY,
     );
 

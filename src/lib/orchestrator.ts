@@ -31,7 +31,7 @@ function numberEnv(key: string, fallback: number) {
 
 const PRIMARY_ENGINE_ATTEMPTS = numberEnv("ORCH_PRIMARY_ENGINE_ATTEMPTS", 3);
 const SECONDARY_ENGINE_ATTEMPTS = numberEnv("ORCH_SECONDARY_ENGINE_ATTEMPTS", 3);
-const PASS_THRESHOLD = numberEnv("ORCH_PASS_THRESHOLD", 0.8);
+const PASS_THRESHOLD = numberEnv("ORCH_PASS_THRESHOLD", 0.9);
 const DEFAULT_RETRY_CAP = numberEnv("ORCH_RETRY_CAP", 8);
 
 function intentCleaner(text: string) {
@@ -59,9 +59,9 @@ function quickFixInstruction(action?: CreateGenerationRequest["quickFixAction"])
 
 function repairPrompt(previousPrompt: string, attempt: number, lastError?: string) {
   const repairBlocks = [
-    "Identity lock absolute: do not replace person; preserve exact face/body proportions from references.",
-    "Garment fidelity absolute: preserve cut, neckline, hemline, drape, seams, and texture exactly.",
-    "Use plain studio catalog framing and avoid intimate or romantic context.",
+    "Identity lock absolute: preserve exact face/body proportions from required references only.",
+    "Retry policy: keep person and garment fixed; only refine framing and lighting.",
+    "Do not alter ethnicity, age appearance, body shape, or garment structure. Correct only composition drift.",
   ];
   const errorHint = lastError
     ? `Previous failure context: ${lastError.slice(0, 180)}. Rewrite to safer catalogue phrasing.`
@@ -88,20 +88,30 @@ function consistencyJudge(params: {
     params.packed.garmentReferenceTypes.includes("front") ||
     params.packed.garmentReferenceTypes.includes("flat_lay");
 
-  const faceIdentity = hasFace ? 0.82 : 0.35;
-  const bodyConsistency = hasFrontBody && hasSideBody ? 0.82 : 0.4;
-  const garmentFidelity = hasPrimaryGarment ? 0.8 : 0.45;
+  const faceIdentity = hasFace ? 0.9 : 0.22;
+  const bodyConsistency = hasFrontBody && hasSideBody ? 0.88 : 0.3;
+  const garmentFidelity = hasPrimaryGarment ? 0.84 : 0.36;
   const catalogSuitability =
-    params.engineId === ENGINE_ORDER[0] ? 0.84 : params.engineId === ENGINE_ORDER[1] ? 0.8 : 0.72;
-  const strictPromptBoost = params.prompt.includes("absolute") ? 0.05 : 0.02;
-  const errorPenalty = params.hadError ? 0.18 : 0;
+    params.engineId === ENGINE_ORDER[0] ? 0.86 : params.engineId === ENGINE_ORDER[1] ? 0.82 : 0.75;
+  const requiredModelRefs = [hasFace, hasFrontBody, hasSideBody].filter(Boolean).length;
+  const referenceCoverage = Number((requiredModelRefs / 3).toFixed(3));
+  const strictPromptBoost = params.prompt.includes("identity lock absolute") ? 0.07 : 0.02;
+  const identityDriftRisk =
+    params.engineId === ENGINE_ORDER[2]
+      ? 0.28
+      : params.engineId === ENGINE_ORDER[1]
+        ? 0.18
+        : 0.1;
+  const errorPenalty = params.hadError ? 0.12 : 0;
 
   const total =
-    faceIdentity * 0.35 +
+    faceIdentity * 0.42 +
     bodyConsistency * 0.3 +
-    garmentFidelity * 0.25 +
+    garmentFidelity * 0.18 +
     catalogSuitability * 0.1 +
+    referenceCoverage * 0.06 +
     strictPromptBoost -
+    identityDriftRisk * 0.12 -
     errorPenalty;
 
   return {
@@ -109,30 +119,45 @@ function consistencyJudge(params: {
     bodyConsistency: Number(bodyConsistency.toFixed(3)),
     garmentFidelity: Number(garmentFidelity.toFixed(3)),
     catalogSuitability: Number(catalogSuitability.toFixed(3)),
-    total: Number(total.toFixed(3)),
+    referenceCoverage,
+    identityDriftRisk: Number(identityDriftRisk.toFixed(3)),
+    total: Number(Math.max(0, Math.min(1, total)).toFixed(3)),
+  };
+}
+
+function referencePackForAttempt(packed: PackedReferences, attempt: number) {
+  const modelPrimary = packed.modelReferenceUrls.slice(0, 3);
+  const modelSecondary = attempt === 1 ? [] : packed.modelReferenceUrls.slice(3, 5);
+  const garmentPrimary = packed.garmentReferenceUrls.slice(0, 1);
+  const garmentSecondary = attempt === 1 ? [] : packed.garmentReferenceUrls.slice(1, 3);
+  return {
+    modelPrimary,
+    allImageUrls: [...modelPrimary, ...modelSecondary, ...garmentPrimary, ...garmentSecondary].filter(Boolean),
   };
 }
 
 async function generationWorker(params: {
   engineId: EngineId;
+  attempt: number;
   prompt: string;
   packed: PackedReferences;
 }) {
+  const refs = referencePackForAttempt(params.packed, params.attempt);
   if (params.engineId === ENGINE_ORDER[0]) {
     return await runFalGptImage2Edit({
       prompt: params.prompt,
-      imageUrls: [...params.packed.modelReferenceUrls.slice(0, 4), ...params.packed.garmentReferenceUrls.slice(0, 2)],
+      imageUrls: refs.allImageUrls,
     });
   }
   if (params.engineId === ENGINE_ORDER[1]) {
     return await runFalNanoBananaEdit({
       prompt: params.prompt,
-      imageUrls: [...params.packed.modelReferenceUrls.slice(0, 4), ...params.packed.garmentReferenceUrls.slice(0, 2)],
+      imageUrls: refs.allImageUrls,
     });
   }
   return await runFalReveEdit({
     prompt: params.prompt,
-    imageUrl: params.packed.modelReferenceUrls[0],
+    imageUrl: refs.modelPrimary[0],
   });
 }
 
@@ -146,9 +171,14 @@ export async function runGenerationOrchestrator(
 }> {
   const retryCap = input.retryCap ?? DEFAULT_RETRY_CAP;
   const cleanedPrompt = intentCleaner(input.request.userMessage);
-  const strictPrompt = `${input.basePrompt}\nUser intent: ${cleanedPrompt}\n${quickFixInstruction(
-    input.request.quickFixAction,
-  )}\nOutput must remain tasteful, adult, and product-catalog focused.`;
+  const strictPrompt = `${input.basePrompt}
+User intent: ${cleanedPrompt}
+Required lock set for attempt 1:
+- Use face + front_body + side_body references as mandatory identity anchors.
+- Preserve exact head-to-shoulder geometry and full-body proportions from these anchors.
+- Preserve garment construction from primary garment reference.
+${quickFixInstruction(input.request.quickFixAction)}
+Output must remain tasteful, adult, and product-catalog focused.`;
 
   let workingPrompt = strictPrompt;
   const attempts: GenerationAttempt[] = [];
@@ -161,6 +191,7 @@ export async function runGenerationOrchestrator(
     try {
       outputUrl = await generationWorker({
         engineId,
+        attempt,
         prompt: workingPrompt,
         packed: input.packedReferences,
       });

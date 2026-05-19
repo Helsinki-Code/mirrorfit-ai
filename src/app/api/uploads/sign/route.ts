@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAdminStorage } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
 import { requireServerUser } from "@/lib/server-auth";
 
 const schema = z.object({
@@ -14,6 +14,7 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const user = await requireServerUser();
+    const adminDb = getAdminDb();
     const adminStorage = getAdminStorage();
     const parsed = schema.safeParse(await request.json());
     if (!parsed.success) {
@@ -21,6 +22,37 @@ export async function POST(request: Request) {
     }
 
     const { kind, fileName, mimeType, modelId, garmentId } = parsed.data;
+
+    if (kind === "model_reference") {
+      if (!modelId) {
+        return NextResponse.json({ error: "modelId is required for model references." }, { status: 400 });
+      }
+      const modelSnap = await adminDb.collection("model_profiles").doc(modelId).get();
+      if (!modelSnap.exists || modelSnap.data()?.userId !== user.uid) {
+        console.warn("tenant.forbidden_upload_sign", {
+          userId: user.uid,
+          kind,
+          modelId,
+        });
+        return NextResponse.json({ error: "Forbidden model reference upload target." }, { status: 403 });
+      }
+    }
+
+    if (kind === "garment_image") {
+      if (!garmentId) {
+        return NextResponse.json({ error: "garmentId is required for garment uploads." }, { status: 400 });
+      }
+      const garmentSnap = await adminDb.collection("garments").doc(garmentId).get();
+      if (!garmentSnap.exists || garmentSnap.data()?.userId !== user.uid) {
+        console.warn("tenant.forbidden_upload_sign", {
+          userId: user.uid,
+          kind,
+          garmentId,
+        });
+        return NextResponse.json({ error: "Forbidden garment upload target." }, { status: 403 });
+      }
+    }
+
     const fileExt = fileName.split(".").pop() || "jpg";
     const objectId = crypto.randomUUID();
     const basePath =

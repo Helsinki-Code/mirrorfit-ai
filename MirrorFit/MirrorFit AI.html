@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>MirrorFit AI — Chat-First Fashion Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,600&family=Syne:wght@400;500;600;700;800&family=Syne+Mono&display=swap" rel="stylesheet"/>
+
+<style>
+/* ══ DARK THEME (default) ══ */
+:root {
+  --bg:          #07080A;
+  --surface:     #0E1014;
+  --card:        #13151A;
+  --border:      #1E2128;
+  --border-soft: #181B21;
+  --gold:        #C9A870;
+  --gold-light:  #E8C98A;
+  --gold-dim:    rgba(201,168,112,.12);
+  --gold-border: rgba(201,168,112,.25);
+  --text:        #EAE6DF;
+  --text-mid:    #9A9590;
+  --text-dim:    #4A4740;
+  --accent:      #2ECC8A;
+  --accent-dim:  rgba(46,204,138,.1);
+  --red:         #E05A5A;
+  --blue:        #5A9BE0;
+  --shadow:      0 8px 32px rgba(0,0,0,.45);
+  --bubble-user-bg:     rgba(201,168,112,.13);
+  --bubble-user-border: rgba(201,168,112,.22);
+}
+
+/* ══ LIGHT THEME ══ */
+[data-theme="light"] {
+  --bg:          #F4EFE8;
+  --surface:     #FDFAF6;
+  --card:        #EDE7DC;
+  --border:      #CEC8BC;
+  --border-soft: #E0D9CE;
+  --gold:        #B8882A;
+  --gold-light:  #C9A870;
+  --gold-dim:    rgba(184,136,42,.1);
+  --gold-border: rgba(184,136,42,.28);
+  --text:        #1C1916;
+  --text-mid:    #5C574F;
+  --text-dim:    #A8A098;
+  --accent:      #1B9965;
+  --accent-dim:  rgba(27,153,101,.1);
+  --red:         #C04040;
+  --blue:        #3A7BC0;
+  --shadow:      0 8px 32px rgba(0,0,0,.13);
+  --bubble-user-bg:     rgba(184,136,42,.1);
+  --bubble-user-border: rgba(184,136,42,.22);
+}
+
+/* ══ RESET ══ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; width: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+#root { height: 100%; width: 100%; }
+
+/* ══ SCROLLBARS ══ */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ══ NOISE TEXTURE ══ */
+body::before {
+  content: '';
+  position: fixed; inset: 0; opacity: .022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 9999;
+}
+
+/* ══ ANIMATIONS ══ */
+@keyframes mfPulse  { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.38;transform:scale(.8)} }
+@keyframes mfBounce { 0%,80%,100%{transform:translateY(0);opacity:.38} 40%{transform:translateY(-5px);opacity:1} }
+@keyframes mfFadeIn { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+@keyframes mfSlideRight { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
+
+/* ══ FORM DEFAULTS ══ */
+textarea, input { font-family: 'Syne', sans-serif; color: var(--text); }
+textarea::placeholder, input::placeholder { color: var(--text-dim); }
+button { font-family: 'Syne', sans-serif; }
+::selection { background: var(--gold-dim); color: var(--text); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"
+  integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L"
+  crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"
+  integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm"
+  crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"
+  integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y"
+  crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="chat-room.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

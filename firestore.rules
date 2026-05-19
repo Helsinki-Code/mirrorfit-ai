@@ -17,64 +17,126 @@ service cloud.firestore {
       return resource.data.userId == request.auth.uid;
     }
 
+    function ownerUnchanged() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    function modelProfileOwned(modelId) {
+      return modelId is string
+        && exists(/databases/$(database)/documents/model_profiles/$(modelId))
+        && get(/databases/$(database)/documents/model_profiles/$(modelId)).data.userId == request.auth.uid;
+    }
+
+    function garmentOwned(garmentId) {
+      return garmentId is string
+        && exists(/databases/$(database)/documents/garments/$(garmentId))
+        && get(/databases/$(database)/documents/garments/$(garmentId)).data.userId == request.auth.uid;
+    }
+
+    function shootJobOwned(jobId) {
+      return jobId is string
+        && exists(/databases/$(database)/documents/shoot_jobs/$(jobId))
+        && get(/databases/$(database)/documents/shoot_jobs/$(jobId)).data.userId == request.auth.uid;
+    }
+
+    function optionalModelOwned() {
+      return !("modelProfileId" in request.resource.data)
+        || request.resource.data.modelProfileId == null
+        || modelProfileOwned(request.resource.data.modelProfileId);
+    }
+
+    function optionalGarmentOwned() {
+      return !("garmentId" in request.resource.data)
+        || request.resource.data.garmentId == null
+        || garmentOwned(request.resource.data.garmentId);
+    }
+
     match /users/{userId} {
-      allow read, update: if isOwner(userId);
+      allow read: if isOwner(userId);
       allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId)
+        && request.resource.data.id == userId
+        && request.resource.data.id == resource.data.id;
       allow delete: if false;
     }
 
     match /model_profiles/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
       allow create: if signedIn() && ownerFieldMatches();
+      allow update: if signedIn() && existingOwnerMatches() && ownerUnchanged();
     }
 
     match /model_reference_images/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn()
+        && ownerFieldMatches()
+        && modelProfileOwned(request.resource.data.modelId);
+      allow update: if signedIn()
+        && existingOwnerMatches()
+        && ownerUnchanged()
+        && modelProfileOwned(request.resource.data.modelId);
     }
 
     match /garments/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
       allow create: if signedIn() && ownerFieldMatches();
+      allow update: if signedIn() && existingOwnerMatches() && ownerUnchanged();
     }
 
     match /garment_images/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn()
+        && ownerFieldMatches()
+        && garmentOwned(request.resource.data.garmentId);
+      allow update: if signedIn()
+        && existingOwnerMatches()
+        && ownerUnchanged()
+        && garmentOwned(request.resource.data.garmentId);
     }
 
     match /generations/{id} {
       allow read: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
-      allow update: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn()
+        && ownerFieldMatches()
+        && modelProfileOwned(request.resource.data.modelProfileId)
+        && garmentOwned(request.resource.data.garmentId);
+      allow update: if signedIn() && existingOwnerMatches() && ownerUnchanged();
       allow delete: if signedIn() && existingOwnerMatches();
     }
 
     match /shoot_jobs/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn()
+        && ownerFieldMatches()
+        && optionalModelOwned()
+        && optionalGarmentOwned();
+      allow update: if signedIn()
+        && existingOwnerMatches()
+        && ownerUnchanged()
+        && optionalModelOwned()
+        && optionalGarmentOwned();
     }
 
     match /shoot_messages/{id} {
       allow read: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /brand_memories/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
       allow create: if signedIn() && ownerFieldMatches();
+      allow update: if signedIn() && existingOwnerMatches() && ownerUnchanged();
     }
 
     match /shoot_approvals/{id} {
       allow read: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     match /brand_presets/{id} {
-      allow read, update, delete: if signedIn() && existingOwnerMatches();
+      allow read, delete: if signedIn() && existingOwnerMatches();
       allow create: if signedIn() && ownerFieldMatches();
+      allow update: if signedIn() && existingOwnerMatches() && ownerUnchanged();
     }
   }
 }

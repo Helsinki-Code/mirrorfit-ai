@@ -72,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let userDocUnsubscribe: Unsubscribe | null = null;
 
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
+      setLoading(true);
+      setProfile(null);
       setUser(nextUser);
 
       if (userDocUnsubscribe) {
@@ -85,20 +87,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const userRef = doc(db, "users", nextUser.uid);
-      const existing = await getDoc(userRef);
+      try {
+        const userRef = doc(db, "users", nextUser.uid);
+        const existing = await getDoc(userRef);
 
-      if (!existing.exists()) {
-        const defaultProfile = buildDefaultProfile(nextUser);
-        await setDoc(userRef, defaultProfile);
-        setProfile(defaultProfile);
-      }
+        if (!existing.exists()) {
+          const defaultProfile = buildDefaultProfile(nextUser);
+          await setDoc(userRef, defaultProfile);
+          setProfile(defaultProfile);
+        }
 
-      userDocUnsubscribe = onSnapshot(userRef, (snapshot) => {
-        if (!snapshot.exists()) return;
-        setProfile(snapshot.data() as UserProfile);
+        userDocUnsubscribe = onSnapshot(
+          userRef,
+          (snapshot) => {
+            if (!snapshot.exists()) return;
+            setProfile(snapshot.data() as UserProfile);
+            setLoading(false);
+          },
+          () => {
+            setLoading(false);
+          },
+        );
+      } catch {
         setLoading(false);
-      });
+      }
     });
 
     return () => {

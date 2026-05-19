@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
-import type { ShootApproval, ShootJob, ShootMessage } from "@/lib/types";
-import { nowUnixMs } from "@/lib/utils/time";
+import type { ShootApproval, ShootJob } from "@/lib/types";
 
 export default function SharePage() {
   const { user } = useAuth();
@@ -14,6 +13,7 @@ export default function SharePage() {
   const [jobId, setJobId] = useState("");
   const [comment, setComment] = useState("");
   const [info, setInfo] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -23,10 +23,10 @@ export default function SharePage() {
         const rows = snapshot.docs.map((entry) => entry.data() as ShootJob);
         rows.sort((a, b) => b.updatedAt - a.updatedAt);
         setJobs(rows);
-        if (!jobId && rows[0]) setJobId(rows[0].id);
+        setJobId((prev) => prev || rows[0]?.id || "");
       },
     );
-  }, [jobId, user]);
+  }, [user]);
 
   useEffect(() => {
     if (!jobId || !user) return;
@@ -48,50 +48,40 @@ export default function SharePage() {
 
   const writeDecision = async (decision: ShootApproval["decision"]) => {
     if (!user || !jobId) return;
-    const id = crypto.randomUUID();
-    const now = nowUnixMs();
-    const approval: ShootApproval = {
-      id,
-      jobId,
-      userId: user.uid,
-      decision,
-      comment,
-      createdAt: now,
-    };
-    await setDoc(doc(db, "shoot_approvals", id), approval);
-    await setDoc(
-      doc(db, "shoot_jobs", jobId),
-      {
-        status:
-          decision === "approved"
-            ? "approved"
-            : decision === "rejected"
-              ? "rejected"
-              : "needs_input",
-        updatedAt: now,
-      },
-      { merge: true },
-    );
+    setError("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/shoot-approvals", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jobId,
+          decision,
+          comment: comment.trim() || undefined,
+        }),
+      });
+      const raw = await response.text();
+      let payload = {} as { error?: string };
+      try {
+        payload = JSON.parse(raw) as typeof payload;
+      } catch {
+        if (!response.ok) {
+          throw new Error(`Failed to save decision (${response.status}). ${raw.slice(0, 220)}`);
+        }
+      }
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to save decision.");
+      }
 
-    const messageId = crypto.randomUUID();
-    const reviewerMessage: ShootMessage = {
-      id: messageId,
-      jobId,
-      userId: user.uid,
-      role: "reviewer",
-      content:
-        decision === "approved"
-          ? `Approved. ${comment || "Ready for delivery."}`
-          : decision === "changes_requested"
-            ? `Revision requested. ${comment || "Please refine and regenerate."}`
-            : `Rejected. ${comment || "Not approved."}`,
-      createdAt: nowUnixMs(),
-    };
-    await setDoc(doc(db, "shoot_messages", messageId), reviewerMessage);
-
-    setComment("");
-    setInfo("Decision saved to event log.");
-    setTimeout(() => setInfo(""), 1800);
+      setComment("");
+      setInfo("Decision saved to event log.");
+      setTimeout(() => setInfo(""), 1800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save decision.");
+    }
   };
 
   return (
@@ -153,6 +143,7 @@ export default function SharePage() {
           </p>
         ) : null}
         {info ? <p className="mt-2 text-sm text-emerald-600">{info}</p> : null}
+        {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
       </section>
 
       <section className="card p-4">

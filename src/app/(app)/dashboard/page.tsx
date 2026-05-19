@@ -53,15 +53,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <section className="card p-4">
-        <p className="text-xs uppercase tracking-wide text-muted">Shoot Inbox</p>
+      <section className="card p-5">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted">Shoot Inbox</p>
         <h2 className="mt-1 text-2xl font-semibold text-text-strong">
           Start with one sentence
         </h2>
         <p className="mt-1 text-sm text-muted">
           Example: Use Meera model for my navy satin dress in catalogue style.
         </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <input
             className="subtle-input"
             value={newIdea}
@@ -71,7 +71,7 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={createJob}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm"
           >
             Create Job
           </button>
@@ -87,9 +87,9 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section className="card p-4">
+      <section className="card p-5">
         <h3 className="text-base font-semibold text-text-strong">Recent Jobs</h3>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-2.5">
           {jobs.length === 0 ? (
             <p className="text-sm text-muted">No jobs yet.</p>
           ) : (
@@ -97,7 +97,7 @@ export default function DashboardPage() {
               <Link
                 key={job.id}
                 href={`/studio?job=${job.id}`}
-                className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-3 transition-colors hover:bg-hover"
+                className="flex items-center justify-between rounded-lg border border-border bg-surface px-3.5 py-3 transition-colors hover:bg-hover"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-text">{job.title}</p>
@@ -105,7 +105,7 @@ export default function DashboardPage() {
                     {new Date(job.updatedAt).toLocaleString()}
                   </p>
                 </div>
-                <span className="rounded-md border border-border px-2 py-1 text-xs capitalize text-text">
+                <span className="rounded-md border border-border bg-panel px-2 py-1 text-xs capitalize text-text">
                   {job.status}
                 </span>
               </Link>
@@ -121,7 +121,7 @@ function MetricCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="card p-4">
       <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-text-strong">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-text-strong">{value}</p>
     </div>
   );
 }
