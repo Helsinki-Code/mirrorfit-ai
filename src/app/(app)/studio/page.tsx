@@ -1,87 +1,158 @@
 "use client";
 
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
-import type { CreateGenerationRequest, Garment, Generation, ModelProfile } from "@/lib/types";
-import { PromptHelper } from "@/components/studio/PromptHelper";
+import type {
+  CreateGenerationRequest,
+  Garment,
+  GarmentImage,
+  ModelProfile,
+  ModelReferenceImage,
+  ShootJob,
+  ShootMessage,
+} from "@/lib/types";
 
-const defaultRequest: Omit<CreateGenerationRequest, "modelProfileId" | "garmentId"> = {
-  prompt: "",
-  style: "clean professional e-commerce catalogue render",
-  background: "neutral studio",
-  lighting: "softbox commercial lighting",
-  pose: "natural standing full-body",
-  outputRatio: "4:5",
-};
+const quickFixChips: Array<{
+  label: string;
+  value: NonNullable<CreateGenerationRequest["quickFixAction"]>;
+}> = [
+  { label: "Make more catalogue", value: "more_catalogue" },
+  { label: "Improve garment", value: "improve_garment" },
+  { label: "Keep face same", value: "keep_face_same" },
+  { label: "Change pose", value: "change_pose" },
+  { label: "Generate back view", value: "generate_back_view" },
+];
 
 export default function StudioPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+
+  const [job, setJob] = useState<ShootJob | null>(null);
+  const [messages, setMessages] = useState<ShootMessage[]>([]);
   const [models, setModels] = useState<ModelProfile[]>([]);
   const [garments, setGarments] = useState<Garment[]>([]);
-  const [generations, setGenerations] = useState<Generation[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState("");
-  const [selectedGarmentId, setSelectedGarmentId] = useState("");
-  const [request, setRequest] = useState(defaultRequest);
-  const [generating, setGenerating] = useState(false);
+  const [modelRefs, setModelRefs] = useState<ModelReferenceImage[]>([]);
+  const [garmentRefs, setGarmentRefs] = useState<GarmentImage[]>([]);
+  const [modelId, setModelId] = useState("");
+  const [garmentId, setGarmentId] = useState("");
+  const [message, setMessage] = useState("");
+  const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
+  const [serverMissing, setServerMissing] = useState<string[]>([]);
+
+  const shootJobId = searchParams.get("job") ?? "";
+
+  useEffect(() => {
+    if (!user || !shootJobId) return;
+    const unsub = onSnapshot(doc(db, "shoot_jobs", shootJobId), (snapshot) => {
+      if (!snapshot.exists()) return;
+      const data = snapshot.data() as ShootJob;
+      if (data.userId !== user.uid) return;
+      setJob(data);
+      if (!modelId && data.modelProfileId) setModelId(data.modelProfileId);
+      if (!garmentId && data.garmentId) setGarmentId(data.garmentId);
+    });
+    return unsub;
+  }, [garmentId, modelId, shootJobId, user]);
+
+  useEffect(() => {
+    if (!shootJobId) return;
+    return onSnapshot(
+      query(collection(db, "shoot_messages"), where("jobId", "==", shootJobId)),
+      (snapshot) => {
+        const rows = snapshot.docs.map((entry) => entry.data() as ShootMessage);
+        rows.sort((a, b) => a.createdAt - b.createdAt);
+        setMessages(rows);
+      },
+    );
+  }, [shootJobId]);
 
   useEffect(() => {
     if (!user) return;
-
-    const modelQuery = query(
-      collection(db, "model_profiles"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
+    const unsubModels = onSnapshot(
+      query(collection(db, "model_profiles"), where("userId", "==", user.uid)),
+      (snapshot) => {
+        const rows = snapshot.docs.map((entry) => entry.data() as ModelProfile);
+        rows.sort((a, b) => b.createdAt - a.createdAt);
+        setModels(rows);
+      },
     );
-    const garmentQuery = query(
-      collection(db, "garments"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
+    const unsubGarments = onSnapshot(
+      query(collection(db, "garments"), where("userId", "==", user.uid)),
+      (snapshot) => {
+        const rows = snapshot.docs.map((entry) => entry.data() as Garment);
+        rows.sort((a, b) => b.createdAt - a.createdAt);
+        setGarments(rows);
+      },
     );
-    const generationQuery = query(
-      collection(db, "generations"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
-    );
-
-    const unsubModels = onSnapshot(modelQuery, (snapshot) => {
-      const items = snapshot.docs.map((d) => d.data() as ModelProfile);
-      setModels(items);
-      if (!selectedModelId && items[0]) setSelectedModelId(items[0].id);
-    });
-    const unsubGarments = onSnapshot(garmentQuery, (snapshot) => {
-      const items = snapshot.docs.map((d) => d.data() as Garment);
-      setGarments(items);
-      if (!selectedGarmentId && items[0]) setSelectedGarmentId(items[0].id);
-    });
-    const unsubGenerations = onSnapshot(generationQuery, (snapshot) => {
-      setGenerations(snapshot.docs.map((d) => d.data() as Generation));
-    });
-
     return () => {
       unsubModels();
       unsubGarments();
-      unsubGenerations();
     };
-  }, [selectedGarmentId, selectedModelId, user]);
+  }, [user]);
 
-  const latestOutput = useMemo(
-    () => generations.find((item) => item.status === "completed" && item.outputUrl),
-    [generations],
-  );
+  useEffect(() => {
+    if (!modelId) return;
+    return onSnapshot(
+      query(collection(db, "model_reference_images"), where("modelId", "==", modelId)),
+      (snapshot) => {
+        setModelRefs(snapshot.docs.map((entry) => entry.data() as ModelReferenceImage));
+      },
+    );
+  }, [modelId]);
 
-  const submitGeneration = async () => {
-    if (!user) return;
-    if (!selectedModelId || !selectedGarmentId) {
-      setError("Please select model and garment.");
-      return;
+  useEffect(() => {
+    if (!garmentId) return;
+    return onSnapshot(
+      query(collection(db, "garment_images"), where("garmentId", "==", garmentId)),
+      (snapshot) => {
+        setGarmentRefs(snapshot.docs.map((entry) => entry.data() as GarmentImage));
+      },
+    );
+  }, [garmentId]);
+
+  const latestImage = useMemo(() => {
+    const imageMessage = [...messages].reverse().find((item) => item.imageUrl);
+    return imageMessage?.imageUrl ?? "";
+  }, [messages]);
+
+  const missingCards = useMemo(() => {
+    const missing = new Set<string>();
+    if (!modelId) missing.add("Select model");
+    if (!garmentId) missing.add("Upload or select garment");
+
+    const modelRefTypes = new Set(modelRefs.map((item) => item.imageType));
+    if (modelId && !modelRefTypes.has("face")) missing.add("Upload model face reference");
+    if (modelId && !modelRefTypes.has("front_body")) missing.add("Upload model front-body reference");
+    if (modelId && !modelRefTypes.has("side_body")) missing.add("Upload model side-body reference");
+
+    const garmentRefTypes = new Set(garmentRefs.map((item) => item.imageType));
+    if (garmentId && !garmentRefTypes.has("front") && !garmentRefTypes.has("flat_lay")) {
+      missing.add("Upload garment front or flat-lay reference");
     }
 
+    for (const serverHint of serverMissing) {
+      if (serverHint === "model") missing.add("Select model");
+      if (serverHint === "garment") missing.add("Upload or select garment");
+    }
+
+    return [...missing];
+  }, [garmentId, garmentRefs, modelId, modelRefs, serverMissing]);
+
+  const runGeneration = async (
+    payload: Omit<CreateGenerationRequest, "userMessage"> & {
+      userMessage: string;
+      quickFixAction?: CreateGenerationRequest["quickFixAction"];
+    },
+  ) => {
+    if (!user || !shootJobId) return;
+    setWorking(true);
     setError("");
-    setGenerating(true);
+
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/generations", {
@@ -91,39 +162,120 @@ export default function StudioPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          modelProfileId: selectedModelId,
-          garmentId: selectedGarmentId,
-          ...request,
-        } satisfies CreateGenerationRequest),
+          shootJobId,
+          ...payload,
+        }),
       });
 
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error ?? "Generation failed.");
+      const data = (await response.json()) as {
+        status?: string;
+        error?: string;
+        message?: string;
+        missing?: string[];
+      };
+      if (!response.ok || data.status === "failed") {
+        throw new Error(data.error ?? data.message ?? "Generation failed.");
       }
+      if (data.status === "needs_input") {
+        setError(data.message ?? "Please provide missing information.");
+        setServerMissing(data.missing ?? []);
+      } else {
+        setServerMissing([]);
+      }
+      setMessage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed.");
     } finally {
-      setGenerating(false);
+      setWorking(false);
     }
   };
 
+  const submitMessage = async () => {
+    const userMessage = message.trim();
+    if (!userMessage) return;
+    await runGeneration({
+      modelProfileId: modelId || undefined,
+      garmentId: garmentId || undefined,
+      userMessage,
+    });
+  };
+
+  if (!shootJobId) {
+    return (
+      <div className="card p-6 text-sm text-muted">
+        Open a job from Shoot Inbox to start the conversational shoot room.
+      </div>
+    );
+  }
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+    <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
       <section className="space-y-4">
         <div className="card p-4">
-          <h2 className="text-lg font-semibold text-text-strong">Try-On Studio</h2>
+          <p className="text-xs uppercase tracking-wide text-muted">Chat Shoot Room</p>
+          <h2 className="mt-1 text-xl font-semibold text-text-strong">
+            {job?.title ?? "Production Thread"}
+          </h2>
           <p className="mt-1 text-sm text-muted">
-            Select model + garment, refine prompt, then generate your catalogue render.
+            Describe the shoot naturally. I will handle the structure in the background.
           </p>
+        </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {missingCards.length > 0 ? (
+          <div className="card p-4">
+            <h3 className="text-sm font-semibold text-text-strong">Missing Info Cards</h3>
+            <div className="mt-3 grid gap-2">
+              {missingCards.map((card) => (
+                <div
+                  key={card}
+                  className="rounded-md border border-amber-500/40 bg-amber-100/30 px-3 py-2 text-sm text-text"
+                >
+                  {card}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="card p-4">
+          <div className="space-y-3">
+            {messages.length === 0 ? (
+              <p className="text-sm text-muted">No messages yet. Send your first shoot request.</p>
+            ) : (
+              messages.map((item) => (
+                <div
+                  key={item.id}
+                  className={`rounded-md border px-3 py-2 text-sm ${
+                    item.role === "user"
+                      ? "border-border bg-surface text-text"
+                      : "border-primary/30 bg-primary/10 text-text-strong"
+                  }`}
+                >
+                  <p className="mb-1 text-xs uppercase tracking-wide text-muted">{item.role}</p>
+                  <p>{item.content}</p>
+                  {item.imageUrl ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt="Generated output"
+                      width={600}
+                      height={760}
+                      className="mt-3 h-auto w-full rounded-md border border-border object-cover shadow-[0_10px_28px_rgba(0,0,0,0.2)]"
+                    />
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <div className="grid gap-2 sm:grid-cols-2">
             <select
               className="subtle-input"
-              value={selectedModelId}
-              onChange={(e) => setSelectedModelId(e.target.value)}
+              value={modelId}
+              onChange={(event) => setModelId(event.target.value)}
             >
-              <option value="">Select model profile</option>
+              <option value="">Select model</option>
               {models.map((model) => (
                 <option key={model.id} value={model.id}>
                   {model.modelName}
@@ -132,8 +284,8 @@ export default function StudioPage() {
             </select>
             <select
               className="subtle-input"
-              value={selectedGarmentId}
-              onChange={(e) => setSelectedGarmentId(e.target.value)}
+              value={garmentId}
+              onChange={(event) => setGarmentId(event.target.value)}
             >
               <option value="">Select garment</option>
               {garments.map((garment) => (
@@ -142,95 +294,76 @@ export default function StudioPage() {
                 </option>
               ))}
             </select>
-            <input
-              className="subtle-input"
-              value={request.style}
-              onChange={(e) => setRequest((prev) => ({ ...prev, style: e.target.value }))}
-              placeholder="Style"
-            />
-            <input
-              className="subtle-input"
-              value={request.background}
-              onChange={(e) => setRequest((prev) => ({ ...prev, background: e.target.value }))}
-              placeholder="Background"
-            />
-            <input
-              className="subtle-input"
-              value={request.lighting}
-              onChange={(e) => setRequest((prev) => ({ ...prev, lighting: e.target.value }))}
-              placeholder="Lighting"
-            />
-            <input
-              className="subtle-input"
-              value={request.pose}
-              onChange={(e) => setRequest((prev) => ({ ...prev, pose: e.target.value }))}
-              placeholder="Pose"
-            />
-            <select
-              className="subtle-input"
-              value={request.outputRatio}
-              onChange={(e) =>
-                setRequest((prev) => ({
-                  ...prev,
-                  outputRatio: e.target.value as CreateGenerationRequest["outputRatio"],
-                }))
-              }
-            >
-              <option value="1:1">Square 1:1</option>
-              <option value="4:5">Instagram 4:5</option>
-              <option value="9:16">Story 9:16</option>
-              <option value="16:9">Banner 16:9</option>
-            </select>
-            <button
-              type="button"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              disabled={generating}
-              onClick={submitGeneration}
-            >
-              {generating ? "Generating..." : "Generate Try-On"}
-            </button>
           </div>
 
           <textarea
-            className="subtle-input mt-3 min-h-[130px]"
-            value={request.prompt}
-            onChange={(e) => setRequest((prev) => ({ ...prev, prompt: e.target.value }))}
-            placeholder="Describe garment details, composition, and catalogue intent..."
+            className="subtle-input mt-3 min-h-[96px]"
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            placeholder="Use Meera model and place this navy satin dress in premium catalogue lighting."
           />
           {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
-        </div>
-
-        <div className="card p-4">
-          <h3 className="mb-3 text-base font-semibold text-text-strong">Main Preview Canvas</h3>
-          <div className="relative flex min-h-[540px] items-center justify-center overflow-hidden rounded-lg border border-border bg-surface">
-            {generating ? (
-              <div className="flex flex-col items-center gap-3 text-sm text-muted">
-                <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                Generating your fashion render...
-              </div>
-            ) : latestOutput?.outputUrl ? (
-              <Image
-                src={latestOutput.outputUrl}
-                alt="Generated preview"
-                width={900}
-                height={1200}
-                className="h-auto max-h-[520px] w-auto rounded-md object-contain shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
-              />
-            ) : (
-              <p className="text-sm text-muted">No preview yet. Run a generation to see output here.</p>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={submitMessage}
+            disabled={working}
+            className="mt-3 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {working ? "Working..." : "Generate"}
+          </button>
         </div>
       </section>
 
-      <PromptHelper
-        onInsert={(text) =>
-          setRequest((prev) => ({
-            ...prev,
-            prompt: prev.prompt ? `${prev.prompt}\n${text}` : text,
-          }))
-        }
-      />
+      <section className="space-y-4">
+        <div className="card p-4">
+          <h3 className="text-base font-semibold text-text-strong">Result Message Thread</h3>
+          <div className="relative mt-3 flex min-h-[340px] items-center justify-center rounded-md border border-border bg-surface">
+            {latestImage ? (
+              <Image
+                src={latestImage}
+                alt="Latest render"
+                width={540}
+                height={720}
+                className="h-auto max-h-[320px] w-auto rounded-md object-contain shadow-[0_16px_48px_rgba(0,0,0,0.2)]"
+              />
+            ) : (
+              <p className="text-sm text-muted">Latest generated image appears here.</p>
+            )}
+            {working ? (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/20 backdrop-blur-[1px]">
+                <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-xs text-text">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  Generating...
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <h3 className="text-base font-semibold text-text-strong">Quick Fix Chips</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {quickFixChips.map((chip) => (
+              <button
+                key={chip.value}
+                type="button"
+                disabled={working}
+                onClick={async () => {
+                  await runGeneration({
+                    modelProfileId: modelId || undefined,
+                    garmentId: garmentId || undefined,
+                    userMessage: `Apply quick fix: ${chip.label}`,
+                    quickFixAction: chip.value,
+                  });
+                }}
+                className="pill-btn px-3 py-2 text-xs disabled:opacity-60"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

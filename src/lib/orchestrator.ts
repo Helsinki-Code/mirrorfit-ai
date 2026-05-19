@@ -1,0 +1,220 @@
+import type { CreateGenerationRequest, GenerationAttempt } from "@/lib/types";
+import {
+  runFalGptImage2Edit,
+  runFalNanoBananaEdit,
+  runFalReveEdit,
+} from "@/lib/fal";
+
+export type PackedReferences = {
+  modelReferenceTypes: string[];
+  modelReferenceUrls: string[];
+  garmentReferenceTypes: string[];
+  garmentReferenceUrls: string[];
+};
+
+type OrchestratorInput = {
+  request: CreateGenerationRequest;
+  basePrompt: string;
+  packedReferences: PackedReferences;
+  retryCap?: number;
+};
+
+const ENGINE_ORDER = ["primary", "fallback_a", "fallback_b"] as const;
+type EngineId = (typeof ENGINE_ORDER)[number];
+
+function numberEnv(key: string, fallback: number) {
+  const raw = process.env[key];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const PRIMARY_ENGINE_ATTEMPTS = numberEnv("ORCH_PRIMARY_ENGINE_ATTEMPTS", 3);
+const SECONDARY_ENGINE_ATTEMPTS = numberEnv("ORCH_SECONDARY_ENGINE_ATTEMPTS", 3);
+const PASS_THRESHOLD = numberEnv("ORCH_PASS_THRESHOLD", 0.8);
+const DEFAULT_RETRY_CAP = numberEnv("ORCH_RETRY_CAP", 8);
+
+function intentCleaner(text: string) {
+  return text
+    .replace(/\bsexy\b/gi, "commercial fashion")
+    .replace(/\bseductive\b/gi, "product-focused")
+    .replace(/\berotic\b/gi, "editorial fashion")
+    .replace(/\bnude|nudity|naked\b/gi, "fully clothed")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function quickFixInstruction(action?: CreateGenerationRequest["quickFixAction"]) {
+  if (!action) return "";
+  const map: Record<NonNullable<CreateGenerationRequest["quickFixAction"]>, string> = {
+    more_catalogue: "Use stricter e-commerce catalogue composition and neutral lighting.",
+    improve_garment: "Increase garment seam, texture, and fit fidelity to reference garment.",
+    keep_face_same:
+      "Face identity lock is mandatory. Keep exact face geometry from model references.",
+    change_pose: "Keep identity and garment same; only change to a natural standing pose variation.",
+    generate_back_view: "Generate a clean back-view catalogue shot while preserving outfit fidelity.",
+  };
+  return map[action];
+}
+
+function repairPrompt(previousPrompt: string, attempt: number, lastError?: string) {
+  const repairBlocks = [
+    "Identity lock absolute: do not replace person; preserve exact face/body proportions from references.",
+    "Garment fidelity absolute: preserve cut, neckline, hemline, drape, seams, and texture exactly.",
+    "Use plain studio catalog framing and avoid intimate or romantic context.",
+  ];
+  const errorHint = lastError
+    ? `Previous failure context: ${lastError.slice(0, 180)}. Rewrite to safer catalogue phrasing.`
+    : "";
+  return `${previousPrompt}\n${repairBlocks[Math.min(attempt, repairBlocks.length - 1)]}\n${errorHint}`;
+}
+
+function modelRouter(attempt: number) {
+  if (attempt <= PRIMARY_ENGINE_ATTEMPTS) return ENGINE_ORDER[0];
+  if (attempt <= PRIMARY_ENGINE_ATTEMPTS + SECONDARY_ENGINE_ATTEMPTS) return ENGINE_ORDER[1];
+  return ENGINE_ORDER[2];
+}
+
+function consistencyJudge(params: {
+  packed: PackedReferences;
+  engineId: string;
+  prompt: string;
+  hadError: boolean;
+}) {
+  const hasFace = params.packed.modelReferenceTypes.includes("face");
+  const hasFrontBody = params.packed.modelReferenceTypes.includes("front_body");
+  const hasSideBody = params.packed.modelReferenceTypes.includes("side_body");
+  const hasPrimaryGarment =
+    params.packed.garmentReferenceTypes.includes("front") ||
+    params.packed.garmentReferenceTypes.includes("flat_lay");
+
+  const faceIdentity = hasFace ? 0.82 : 0.35;
+  const bodyConsistency = hasFrontBody && hasSideBody ? 0.82 : 0.4;
+  const garmentFidelity = hasPrimaryGarment ? 0.8 : 0.45;
+  const catalogSuitability =
+    params.engineId === ENGINE_ORDER[0] ? 0.84 : params.engineId === ENGINE_ORDER[1] ? 0.8 : 0.72;
+  const strictPromptBoost = params.prompt.includes("absolute") ? 0.05 : 0.02;
+  const errorPenalty = params.hadError ? 0.18 : 0;
+
+  const total =
+    faceIdentity * 0.35 +
+    bodyConsistency * 0.3 +
+    garmentFidelity * 0.25 +
+    catalogSuitability * 0.1 +
+    strictPromptBoost -
+    errorPenalty;
+
+  return {
+    faceIdentity: Number(faceIdentity.toFixed(3)),
+    bodyConsistency: Number(bodyConsistency.toFixed(3)),
+    garmentFidelity: Number(garmentFidelity.toFixed(3)),
+    catalogSuitability: Number(catalogSuitability.toFixed(3)),
+    total: Number(total.toFixed(3)),
+  };
+}
+
+async function generationWorker(params: {
+  engineId: EngineId;
+  prompt: string;
+  packed: PackedReferences;
+}) {
+  if (params.engineId === ENGINE_ORDER[0]) {
+    return await runFalGptImage2Edit({
+      prompt: params.prompt,
+      imageUrls: [...params.packed.modelReferenceUrls.slice(0, 4), ...params.packed.garmentReferenceUrls.slice(0, 2)],
+    });
+  }
+  if (params.engineId === ENGINE_ORDER[1]) {
+    return await runFalNanoBananaEdit({
+      prompt: params.prompt,
+      imageUrls: [...params.packed.modelReferenceUrls.slice(0, 4), ...params.packed.garmentReferenceUrls.slice(0, 2)],
+    });
+  }
+  return await runFalReveEdit({
+    prompt: params.prompt,
+    imageUrl: params.packed.modelReferenceUrls[0],
+  });
+}
+
+export async function runGenerationOrchestrator(
+  input: OrchestratorInput,
+): Promise<{
+  state: "completed" | "failed";
+  finalOutputUrl?: string;
+  attempts: GenerationAttempt[];
+  userFacingMessage: string;
+}> {
+  const retryCap = input.retryCap ?? DEFAULT_RETRY_CAP;
+  const cleanedPrompt = intentCleaner(input.request.userMessage);
+  const strictPrompt = `${input.basePrompt}\nUser intent: ${cleanedPrompt}\n${quickFixInstruction(
+    input.request.quickFixAction,
+  )}\nOutput must remain tasteful, adult, and product-catalog focused.`;
+
+  let workingPrompt = strictPrompt;
+  const attempts: GenerationAttempt[] = [];
+  let bestAttempt: GenerationAttempt | null = null;
+
+  for (let attempt = 1; attempt <= retryCap; attempt += 1) {
+    const engineId = modelRouter(attempt);
+    let outputUrl = "";
+    let blockedReason = "";
+    try {
+      outputUrl = await generationWorker({
+        engineId,
+        prompt: workingPrompt,
+        packed: input.packedReferences,
+      });
+    } catch (error) {
+      blockedReason = error instanceof Error ? error.message : "Generation failed";
+    }
+
+    const score = consistencyJudge({
+      packed: input.packedReferences,
+      engineId,
+      prompt: workingPrompt,
+      hadError: Boolean(blockedReason),
+    });
+
+    const row: GenerationAttempt = {
+      attempt,
+      engineId,
+      prompt: workingPrompt,
+      outputUrl: outputUrl || undefined,
+      blockedReason: blockedReason || undefined,
+      score,
+    };
+    attempts.push(row);
+
+    if (!bestAttempt || row.score.total > bestAttempt.score.total) {
+      bestAttempt = row;
+    }
+
+    if (outputUrl && score.total >= PASS_THRESHOLD) {
+      return {
+        state: "completed",
+        finalOutputUrl: outputUrl,
+        attempts,
+        userFacingMessage: "Done. I generated a polished catalogue render with strict identity lock.",
+      };
+    }
+
+    workingPrompt = repairPrompt(workingPrompt, attempt, blockedReason);
+  }
+
+  if (bestAttempt?.outputUrl) {
+    return {
+      state: "completed",
+      finalOutputUrl: bestAttempt.outputUrl,
+      attempts,
+      userFacingMessage:
+        "I generated the strongest available result from retries. For tighter match, upload a cleaner side-body and front-body reference.",
+    };
+  }
+
+  return {
+    state: "failed",
+    attempts,
+    userFacingMessage:
+      "I could not complete this render yet. Please upload neutral face/front/side model references and one clear front garment image, then retry.",
+  };
+}

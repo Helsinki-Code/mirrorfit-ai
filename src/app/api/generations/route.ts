@@ -1,54 +1,37 @@
 import { NextResponse } from "next/server";
-import OpenAI, { toFile } from "openai";
 import { z } from "zod";
 import { getAdminDb, getAdminStorage } from "@/lib/firebase/admin";
+import { runGenerationOrchestrator } from "@/lib/orchestrator";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireServerUser } from "@/lib/server-auth";
 import { classifySafety } from "@/lib/safety";
-import type { Garment, Generation, ModelProfile } from "@/lib/types";
+import type {
+  BrandMemory,
+  CreateGenerationRequest,
+  Garment,
+  Generation,
+  ModelProfile,
+  ShootJob,
+  ShootMessage,
+} from "@/lib/types";
 import { nowUnixMs } from "@/lib/utils/time";
 
 const requestSchema = z.object({
-  modelProfileId: z.string().min(1),
-  garmentId: z.string().min(1),
-  style: z.string().min(3),
-  background: z.string().min(2),
-  lighting: z.string().min(2),
-  pose: z.string().min(2),
-  outputRatio: z.enum(["1:1", "4:5", "9:16", "16:9"]),
-  prompt: z.string().min(10),
+  shootJobId: z.string().optional(),
+  modelProfileId: z.string().optional(),
+  garmentId: z.string().optional(),
+  userMessage: z.string().min(1),
+  quickFixAction: z
+    .enum([
+      "more_catalogue",
+      "improve_garment",
+      "keep_face_same",
+      "change_pose",
+      "generate_back_view",
+    ])
+    .optional(),
 });
-
-function emitTelemetry(event: string, payload: Record<string, unknown>) {
-  console.info(`[mirrorfit-telemetry] ${event}`, payload);
-}
-
-function extensionFromMime(mimeType: string) {
-  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg";
-  if (mimeType.includes("webp")) return "webp";
-  return "png";
-}
-
-function sanitizeCommercialPrompt(prompt: string) {
-  return prompt
-    .replace(/\bsexy\b/gi, "commercial fashion")
-    .replace(/\bseductive\b/gi, "product-focused")
-    .replace(/\berotic\b/gi, "editorial fashion")
-    .replace(/\bhot\b/gi, "professional")
-    .replace(/\blingerie\b/gi, "sleepwear fashion")
-    .replace(/\bnude|nudity|naked\b/gi, "fully clothed")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function isOpenAISexualSafetyBlock(error: unknown) {
-  if (!(error instanceof Error)) return false;
-  return (
-    /safety_violations=\[sexual\]/i.test(error.message) ||
-    /request was rejected by the safety system/i.test(error.message)
-  );
-}
 
 type ReferenceRecord = {
   downloadUrl?: string;
@@ -85,6 +68,34 @@ function sortByReferencePriority(
   });
 }
 
+function buildJobTitle(message: string) {
+  const cleaned = message.trim().replace(/\s+/g, " ");
+  return cleaned.length > 44 ? `${cleaned.slice(0, 44)}...` : cleaned;
+}
+
+async function writeMessage(params: {
+  adminDb: ReturnType<typeof getAdminDb>;
+  jobId: string;
+  userId: string;
+  role: ShootMessage["role"];
+  content: string;
+  imageUrl?: string;
+}) {
+  const id = crypto.randomUUID();
+  const now = nowUnixMs();
+  const message: ShootMessage = {
+    id,
+    jobId: params.jobId,
+    userId: params.userId,
+    role: params.role,
+    content: params.content,
+    imageUrl: params.imageUrl,
+    createdAt: now,
+  };
+  await params.adminDb.collection("shoot_messages").doc(id).set(message);
+  return message;
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireServerUser();
@@ -96,137 +107,219 @@ export async function POST(request: Request) {
       windowMs: 60_000,
       maxRequests: 8,
     });
-
     if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: "Rate limit exceeded. Please wait and try again." },
-        { status: 429 },
-      );
+      return NextResponse.json({ error: "Rate limit exceeded." }, { status: 429 });
     }
 
     const parsed = requestSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid request payload.", details: parsed.error.issues },
+        { status: "failed", error: "Invalid request payload.", details: parsed.error.issues },
         { status: 400 },
       );
     }
 
-    const payload = parsed.data;
-    const generationId = crypto.randomUUID();
+    const payload = parsed.data satisfies CreateGenerationRequest;
     const now = nowUnixMs();
-    const generationRef = adminDb.collection("generations").doc(generationId);
+    const brandMemorySnap = await adminDb.collection("brand_memories").doc(user.uid).get();
+    const brandMemory = brandMemorySnap.exists
+      ? (brandMemorySnap.data() as BrandMemory)
+      : null;
 
-    const baseGeneration: Generation = {
-      id: generationId,
+    const selectedModelProfileId = payload.modelProfileId ?? brandMemory?.preferredModelId;
+    const selectedGarmentId = payload.garmentId;
+
+    let shootJobId = payload.shootJobId;
+    if (!shootJobId) {
+      shootJobId = crypto.randomUUID();
+      const newJob: ShootJob = {
+        id: shootJobId,
+        userId: user.uid,
+        title: buildJobTitle(payload.userMessage),
+        status: "draft",
+        modelProfileId: selectedModelProfileId,
+        garmentId: selectedGarmentId,
+        lastMessage: payload.userMessage,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await adminDb.collection("shoot_jobs").doc(shootJobId).set(newJob);
+    } else {
+      const existing = await adminDb.collection("shoot_jobs").doc(shootJobId).get();
+      if (!existing.exists || existing.data()?.userId !== user.uid) {
+        return NextResponse.json(
+          { status: "failed", error: "Shoot job not found or unauthorized." },
+          { status: 404 },
+        );
+      }
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        modelProfileId: selectedModelProfileId ?? existing.data()?.modelProfileId,
+        garmentId: selectedGarmentId ?? existing.data()?.garmentId,
+        lastMessage: payload.userMessage,
+        updatedAt: now,
+      });
+    }
+
+    await writeMessage({
+      adminDb,
+      jobId: shootJobId,
       userId: user.uid,
-      modelProfileId: payload.modelProfileId,
-      garmentId: payload.garmentId,
-      prompt: payload.prompt,
-      style: payload.style,
-      background: payload.background,
-      lighting: payload.lighting,
-      pose: payload.pose,
-      outputRatio: payload.outputRatio,
-      status: "queued",
-      safetyDecision: "allow",
-      outputPath: "",
-      outputUrl: "",
-      createdAt: now,
-      updatedAt: now,
-    };
+      role: "user",
+      content: payload.userMessage,
+    });
 
-    await generationRef.set(baseGeneration);
+    const missing: string[] = [];
+    if (!selectedModelProfileId) missing.push("model");
+    if (!selectedGarmentId) missing.push("garment");
+
+    if (missing.length > 0) {
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        status: "needs_input",
+        updatedAt: nowUnixMs(),
+      });
+      const message = `I need ${missing.join(" and ")} to continue. Please select them and I will generate immediately.`;
+      await writeMessage({
+        adminDb,
+        jobId: shootJobId,
+        userId: user.uid,
+        role: "assistant",
+        content: message,
+      });
+      return NextResponse.json({
+        status: "needs_input",
+        shootJobId,
+        missing,
+        message,
+      });
+    }
+
+    const modelProfileId = selectedModelProfileId as string;
+    const garmentId = selectedGarmentId as string;
 
     const [modelSnap, garmentSnap, referencesSnap, garmentImagesSnap] = await Promise.all([
-      adminDb.collection("model_profiles").doc(payload.modelProfileId).get(),
-      adminDb.collection("garments").doc(payload.garmentId).get(),
+      adminDb.collection("model_profiles").doc(modelProfileId).get(),
+      adminDb.collection("garments").doc(garmentId).get(),
       adminDb
         .collection("model_reference_images")
-        .where("userId", "==", user.uid)
-        .where("modelId", "==", payload.modelProfileId)
+        .where("modelId", "==", modelProfileId)
         .get(),
       adminDb
         .collection("garment_images")
-        .where("userId", "==", user.uid)
-        .where("garmentId", "==", payload.garmentId)
+        .where("garmentId", "==", garmentId)
         .get(),
     ]);
 
     if (!modelSnap.exists || !garmentSnap.exists) {
-      await generationRef.update({
-        status: "failed",
-        errorMessage: "Model or garment not found.",
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        status: "needs_input",
         updatedAt: nowUnixMs(),
       });
-      return NextResponse.json({ error: "Model or garment not found." }, { status: 404 });
+      return NextResponse.json({
+        status: "needs_input",
+        shootJobId,
+        message: "Selected model or garment was not found. Please reselect and try again.",
+      });
     }
 
     const model = modelSnap.data() as ModelProfile;
     const garment = garmentSnap.data() as Garment;
     if (model.userId !== user.uid || garment.userId !== user.uid) {
-      await generationRef.update({
-        status: "failed",
-        errorMessage: "Unauthorized resource access.",
+      return NextResponse.json(
+        { status: "failed", error: "Unauthorized resource access." },
+        { status: 403 },
+      );
+    }
+    if (
+      brandMemory?.approvedModelIds?.length &&
+      !brandMemory.approvedModelIds.includes(model.id)
+    ) {
+      const message =
+        "This model is not in your approved model set. Add it in Brand Memory or select another model.";
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        status: "needs_input",
         updatedAt: nowUnixMs(),
       });
-      return NextResponse.json({ error: "Unauthorized resource access." }, { status: 403 });
+      await writeMessage({
+        adminDb,
+        jobId: shootJobId,
+        userId: user.uid,
+        role: "assistant",
+        content: message,
+      });
+      return NextResponse.json({
+        status: "needs_input",
+        shootJobId,
+        message,
+      });
     }
 
     const safety = classifySafety(payload, model);
     if (safety.decision === "reject") {
-      await generationRef.update({
-        status: "failed",
-        safetyDecision: "reject",
-        errorMessage: safety.reason ?? "Unsafe request.",
+      const message =
+        "I cannot generate this as written. I can still help by turning it into a safe, professional fashion catalogue request.";
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        status: "needs_input",
         updatedAt: nowUnixMs(),
       });
-      return NextResponse.json(
-        {
-          error:
-            "I can't help create explicit or unsafe content, but I can generate a professional fashion catalogue render.",
-          decision: "reject",
-        },
-        { status: 400 },
-      );
+      await writeMessage({
+        adminDb,
+        jobId: shootJobId,
+        userId: user.uid,
+        role: "assistant",
+        content: message,
+      });
+      return NextResponse.json({
+        status: "needs_input",
+        shootJobId,
+        message,
+      });
     }
 
-    await generationRef.update({ status: "generating", updatedAt: nowUnixMs() });
-
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const modelName = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
-
     const modelReferencesSorted = sortByReferencePriority(
-      referencesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
+      referencesSnap.docs
+        .map((doc) => doc.data() as ReferenceRecord & { userId?: string })
+        .filter((row) => row.userId === user.uid),
       MODEL_REFERENCE_PRIORITY,
     );
     const garmentReferencesSorted = sortByReferencePriority(
-      garmentImagesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
+      garmentImagesSnap.docs
+        .map((doc) => doc.data() as ReferenceRecord & { userId?: string })
+        .filter((row) => row.userId === user.uid),
       GARMENT_REFERENCE_PRIORITY,
     );
 
     const modelReferenceTypes = modelReferencesSorted
       .map((entry) => entry.imageType ?? "")
       .filter(Boolean);
+    const garmentReferenceTypes = garmentReferencesSorted
+      .map((entry) => entry.imageType ?? "")
+      .filter(Boolean);
+
     const hasFace = modelReferenceTypes.includes("face");
     const hasFrontBody = modelReferenceTypes.includes("front_body");
     const hasSideBody = modelReferenceTypes.includes("side_body");
+    const hasPrimaryGarment =
+      garmentReferenceTypes.includes("front") || garmentReferenceTypes.includes("flat_lay");
 
-    if (!hasFace || !hasFrontBody || !hasSideBody) {
-      await generationRef.update({
-        status: "failed",
-        errorMessage:
-          "For strong identity lock, upload at least face, front_body, and side_body references.",
+    if (!hasFace || !hasFrontBody || !hasSideBody || !hasPrimaryGarment) {
+      const message =
+        "Before generating, please upload required references: model face + full-body front + full-body side, and one garment front/flat-lay image.";
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        status: "needs_input",
         updatedAt: nowUnixMs(),
       });
-      return NextResponse.json(
-        {
-          error:
-            "Please upload required model references: face + full-body front + full-body side.",
-          code: "insufficient_model_references",
-        },
-        { status: 400 },
-      );
+      await writeMessage({
+        adminDb,
+        jobId: shootJobId,
+        userId: user.uid,
+        role: "assistant",
+        content: message,
+      });
+      return NextResponse.json({
+        status: "needs_input",
+        shootJobId,
+        message,
+      });
     }
 
     const modelReferenceUrls = modelReferencesSorted
@@ -237,30 +330,6 @@ export async function POST(request: Request) {
       .map((entry) => String(entry.downloadUrl ?? ""))
       .filter(Boolean)
       .slice(0, 3);
-    const garmentReferenceTypes = garmentReferencesSorted
-      .map((entry) => entry.imageType ?? "")
-      .filter(Boolean)
-      .slice(0, 3);
-
-    const hasPrimaryGarmentRef =
-      garmentReferenceTypes.includes("front") || garmentReferenceTypes.includes("flat_lay");
-
-    if (modelReferenceUrls.length === 0 || garmentReferenceUrls.length === 0 || !hasPrimaryGarmentRef) {
-      await generationRef.update({
-        status: "failed",
-        errorMessage:
-          "Missing primary garment reference image (front or flat-lay).",
-        updatedAt: nowUnixMs(),
-      });
-      return NextResponse.json(
-        {
-          error:
-            "Please upload at least one primary garment reference image (front view or flat-lay).",
-          code: "insufficient_garment_references",
-        },
-        { status: 400 },
-      );
-    }
 
     const basePrompt = buildGenerationPrompt({
       request: payload,
@@ -272,74 +341,92 @@ export async function POST(request: Request) {
       modelReferenceTypes,
       garmentReferenceTypes,
     });
-    const prompt = `${sanitizeCommercialPrompt(basePrompt)}\nStrict tone: fully clothed adult, non-explicit, non-pornographic, product-focused commercial fashion catalogue framing.\nIdentity and body lock are mandatory and take priority over stylistic variation.`;
+    const memoryPrompt = brandMemory
+      ? `\nBrand memory defaults: lighting=${brandMemory.defaultLighting}; preferred crop=${brandMemory.preferredCrop}; output pack=${brandMemory.preferredOutputPack}; catalogue style=${brandMemory.favoriteCatalogueStyle}; approved models=${brandMemory.approvedModelIds.join(", ") || "none"}; avoided backgrounds=${brandMemory.avoidedBackgrounds.join(", ") || "none"}.`
+      : "";
 
-    const imageSources = [
-      ...modelReferenceUrls.slice(0, 4),
-      ...garmentReferenceUrls.slice(0, 2),
-    ];
-    const imageFiles = await Promise.all(
-      imageSources.map(async (url, index) => {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch reference image: ${response.status}`);
-        }
-        const contentType = response.headers.get("content-type") ?? "image/png";
-        const bytes = Buffer.from(await response.arrayBuffer());
-        const ext = extensionFromMime(contentType);
-        return await toFile(bytes, `reference-${index}.${ext}`, { type: contentType });
-      }),
-    );
+    const generationId = crypto.randomUUID();
+    const generationRef = adminDb.collection("generations").doc(generationId);
+    const generation: Generation = {
+      id: generationId,
+      userId: user.uid,
+      modelProfileId,
+      garmentId,
+      prompt: payload.userMessage,
+      style: "auto",
+      background: "auto",
+      lighting: "auto",
+      pose: "auto",
+      outputRatio: "4:5",
+      status: "generating",
+      safetyDecision: "allow",
+      outputPath: "",
+      outputUrl: "",
+      createdAt: nowUnixMs(),
+      updatedAt: nowUnixMs(),
+    };
+    await generationRef.set(generation);
+    await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      status: "working",
+      latestGenerationId: generationId,
+      updatedAt: nowUnixMs(),
+    });
 
-    let imageResponse;
-    try {
-      imageResponse = await openai.images.edit({
-        model: modelName,
-        image: imageFiles,
-        prompt,
-        n: 1,
-        size: "auto",
-        quality: "auto",
-        background: "auto",
+    const orchestrated = await runGenerationOrchestrator({
+      request: payload,
+      basePrompt: `${basePrompt}${memoryPrompt}`,
+      packedReferences: {
+        modelReferenceTypes,
+        modelReferenceUrls,
+        garmentReferenceTypes,
+        garmentReferenceUrls,
+      },
+      retryCap: 8,
+    });
+
+    if (orchestrated.state === "failed" || !orchestrated.finalOutputUrl) {
+      await generationRef.update({
+        status: "failed",
+        errorMessage: orchestrated.userFacingMessage,
+        updatedAt: nowUnixMs(),
+        attempts: orchestrated.attempts,
       });
-    } catch (apiError) {
-      if (isOpenAISexualSafetyBlock(apiError)) {
-        await generationRef.update({
-          status: "failed",
-          errorMessage:
-            "Generation blocked by safety filter. Use neutral model references (front/side/full-body), avoid intimate/romantic shots, and keep prompts strictly product-catalog.",
-          updatedAt: nowUnixMs(),
-        });
-        return NextResponse.json(
-          {
-            error:
-              "Generation was blocked by safety filters. Please use neutral studio-style model references and product-focused prompt language.",
-            code: "safety_blocked",
-          },
-          { status: 400 },
-        );
-      }
-      throw apiError;
+      await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+        status: "failed",
+        updatedAt: nowUnixMs(),
+      });
+      await writeMessage({
+        adminDb,
+        jobId: shootJobId,
+        userId: user.uid,
+        role: "assistant",
+        content: orchestrated.userFacingMessage,
+      });
+      return NextResponse.json({
+        status: "failed",
+        shootJobId,
+        generationId,
+        message: orchestrated.userFacingMessage,
+        meta: {
+          attemptCount: orchestrated.attempts.length,
+        },
+      });
     }
 
-    const b64 = imageResponse.data?.[0]?.b64_json;
-    if (!b64) {
-      throw new Error("Image generation returned empty response.");
+    const rawOutput = await fetch(orchestrated.finalOutputUrl);
+    if (!rawOutput.ok) {
+      throw new Error(`Failed to fetch final generated image: ${rawOutput.status}`);
     }
-
+    const imageBytes = Buffer.from(await rawOutput.arrayBuffer());
     const outputPath = `users/${user.uid}/generations/${generationId}/output.png`;
-    const buffer = Buffer.from(b64, "base64");
-    const bucket = adminStorage.bucket();
-    const file = bucket.file(outputPath);
-
-    await file.save(buffer, {
+    const file = adminStorage.bucket().file(outputPath);
+    await file.save(imageBytes, {
       metadata: {
         contentType: "image/png",
         cacheControl: "public, max-age=3600",
       },
       resumable: false,
     });
-
     const [signedUrl] = await file.getSignedUrl({
       action: "read",
       expires: "03-01-2500",
@@ -349,26 +436,42 @@ export async function POST(request: Request) {
       status: "completed",
       outputPath,
       outputUrl: signedUrl,
-      safetyDecision: "allow",
+      updatedAt: nowUnixMs(),
+      attempts: orchestrated.attempts,
+    });
+    await adminDb.collection("shoot_jobs").doc(shootJobId).update({
+      status: "completed",
+      latestGenerationId: generationId,
+      latestOutputUrl: signedUrl,
       updatedAt: nowUnixMs(),
     });
-
-    emitTelemetry("generation.completed", {
+    await writeMessage({
+      adminDb,
+      jobId: shootJobId,
       userId: user.uid,
-      generationId,
-      modelProfileId: payload.modelProfileId,
-      garmentId: payload.garmentId,
+      role: "assistant",
+      content: orchestrated.userFacingMessage,
+      imageUrl: signedUrl,
     });
 
-    return NextResponse.json({ id: generationId, status: "completed" });
+    return NextResponse.json({
+      status: "completed",
+      shootJobId,
+      generationId,
+      outputUrl: signedUrl,
+      message: orchestrated.userFacingMessage,
+      meta: {
+        attemptCount: orchestrated.attempts.length,
+        bestScore: Math.max(...orchestrated.attempts.map((attempt) => attempt.score.total)),
+      },
+    });
   } catch (error) {
     console.error("generation.error", error);
     return NextResponse.json(
       {
+        status: "failed",
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to generate image. Check backend configuration.",
+          error instanceof Error ? error.message : "Failed to generate image. Please retry.",
       },
       { status: 500 },
     );

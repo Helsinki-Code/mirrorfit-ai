@@ -3,6 +3,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { requireServerUser } from "@/lib/server-auth";
 import type { Generation } from "@/lib/types";
 
+function toPublicStatus(status: Generation["status"]) {
+  if (status === "queued" || status === "generating") return "working";
+  if (status === "completed") return "completed";
+  return "failed";
+}
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
@@ -22,7 +28,15 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    return NextResponse.json({ generation });
+    return NextResponse.json({
+      status: toPublicStatus(generation.status),
+      generation: {
+        id: generation.id,
+        outputUrl: generation.outputUrl,
+        createdAt: generation.createdAt,
+        updatedAt: generation.updatedAt,
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch generation." },

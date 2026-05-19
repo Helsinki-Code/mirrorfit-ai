@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function OnboardingPage() {
@@ -12,13 +12,17 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  if (!user) {
-    router.replace("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (profile?.authorizedUseConfirmed && profile.adultContentPolicyAck) {
+      router.replace("/dashboard");
+    }
+  }, [profile?.adultContentPolicyAck, profile?.authorizedUseConfirmed, router, user]);
 
-  if (profile?.authorizedUseConfirmed && profile.adultContentPolicyAck) {
-    router.replace("/dashboard");
+  if (!user || (profile?.authorizedUseConfirmed && profile.adultContentPolicyAck)) {
     return null;
   }
 

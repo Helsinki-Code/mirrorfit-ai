@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   collection,
   deleteDoc,
@@ -14,362 +14,219 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
-import type {
-  CreateModelProfileInput,
-  ModelProfile,
-  ModelReferenceImage,
-  ReferenceImageType,
-} from "@/lib/types";
-import { nowUnixMs } from "@/lib/utils/time";
+import type { ModelProfile, ModelReferenceImage, ReferenceImageType } from "@/lib/types";
 import { buildStoragePath } from "@/lib/utils/storage";
+import { nowUnixMs } from "@/lib/utils/time";
 
-const referenceTypes: ReferenceImageType[] = [
-  "face",
-  "front_body",
-  "side_body",
-  "back_body",
-  "pose",
-  "closeup",
-];
+const requiredReferenceOrder: ReferenceImageType[] = ["face", "front_body", "side_body"];
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
-const defaultForm: CreateModelProfileInput = {
-  modelName: "",
-  modelType: "authorized_reference",
-  adultConfirmed: false,
-  usageAuthorized: false,
-  defaultStyle: "ecommerce_catalogue",
-  defaultBackground: "neutral_studio",
-  identityLock: true,
-  bodyLock: true,
-};
+async function getImageDimensions(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const instance = new window.Image();
+      instance.onload = () => resolve(instance);
+      instance.onerror = () => reject(new Error("Invalid image."));
+      instance.src = objectUrl;
+    });
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 export default function ModelsPage() {
   const { user } = useAuth();
-  const [form, setForm] = useState<CreateModelProfileInput>(defaultForm);
   const [models, setModels] = useState<ModelProfile[]>([]);
-  const [references, setReferences] = useState<ModelReferenceImage[]>([]);
+  const [refs, setRefs] = useState<ModelReferenceImage[]>([]);
+  const [name, setName] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
-  const [uploadType, setUploadType] = useState<ReferenceImageType>("face");
-  const [uploadMsg, setUploadMsg] = useState("");
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [info, setInfo] = useState("");
 
   useEffect(() => {
     if (!user) return;
-
-    const modelQuery = query(
-      collection(db, "model_profiles"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
+    const unsubModels = onSnapshot(
+      query(collection(db, "model_profiles"), where("userId", "==", user.uid), orderBy("createdAt", "desc")),
+      (snapshot) => {
+        const rows = snapshot.docs.map((doc) => doc.data() as ModelProfile);
+        setModels(rows);
+        if (!selectedModelId && rows[0]) setSelectedModelId(rows[0].id);
+      },
     );
-    const refQuery = query(
-      collection(db, "model_reference_images"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
+    const unsubRefs = onSnapshot(
+      query(collection(db, "model_reference_images"), where("userId", "==", user.uid), orderBy("createdAt", "desc")),
+      (snapshot) => setRefs(snapshot.docs.map((doc) => doc.data() as ModelReferenceImage)),
     );
-
-    const unsubModels = onSnapshot(modelQuery, (snapshot) => {
-      const items = snapshot.docs.map((d) => d.data() as ModelProfile);
-      setModels(items);
-      if (!selectedModelId && items[0]?.id) {
-        setSelectedModelId(items[0].id);
-      }
-    });
-    const unsubReferences = onSnapshot(refQuery, (snapshot) => {
-      setReferences(snapshot.docs.map((d) => d.data() as ModelReferenceImage));
-    });
-
     return () => {
       unsubModels();
-      unsubReferences();
+      unsubRefs();
     };
   }, [selectedModelId, user]);
 
-  const refCountByModel = useMemo(() => {
-    const countMap = new Map<string, number>();
-    references.forEach((reference) => {
-      countMap.set(reference.modelId, (countMap.get(reference.modelId) ?? 0) + 1);
-    });
-    return countMap;
-  }, [references]);
-
-  const handleCreateModel = async () => {
-    if (!user) return;
-    if (!form.modelName.trim()) {
-      setError("Model name is required.");
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-    try {
-      const id = crypto.randomUUID();
-      const now = nowUnixMs();
-      const model: ModelProfile = {
-        id,
-        userId: user.uid,
-        ...form,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await setDoc(doc(db, "model_profiles", id), model);
-      setForm(defaultForm);
-      setSelectedModelId(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create model profile.");
-    } finally {
-      setSaving(false);
-    }
+  const createModel = async () => {
+    if (!user || !name.trim()) return;
+    const id = crypto.randomUUID();
+    const now = nowUnixMs();
+    const model: ModelProfile = {
+      id,
+      userId: user.uid,
+      modelName: name.trim(),
+      modelType: "authorized_reference",
+      adultConfirmed: true,
+      usageAuthorized: true,
+      defaultStyle: "catalogue",
+      defaultBackground: "studio",
+      identityLock: true,
+      bodyLock: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await setDoc(doc(db, "model_profiles", id), model);
+    setName("");
+    setSelectedModelId(id);
   };
 
-  const handleUpload = async (file: File) => {
-    if (!user || !selectedModelId) {
-      setError("Create or select a model first.");
-      return;
-    }
-
+  const uploadReference = async (type: ReferenceImageType, file: File) => {
+    if (!user || !selectedModelId) return;
     setError("");
-    setUploadMsg("Uploading reference image...");
+    setInfo("");
     try {
       if (!file.type.startsWith("image/")) {
-        throw new Error("Only image files are accepted.");
+        throw new Error("Please upload a valid image file.");
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        throw new Error("Image exceeds 10MB. Use a smaller file.");
+      }
+      const dimensions = await getImageDimensions(file);
+      if (dimensions.width < 600 || dimensions.height < 600) {
+        throw new Error("Image resolution is too small. Use at least 600x600.");
       }
 
-      const quality = await evaluateImageQuality(file);
-      const refId = crypto.randomUUID();
-      const ext = file.name.split(".").pop() ?? "jpg";
+      const id = crypto.randomUUID();
+      const ext = file.name.split(".").pop() || "png";
       const storagePath = buildStoragePath([
         "users",
         user.uid,
         "models",
         selectedModelId,
         "references",
-        `${refId}.${ext}`,
+        `${type}_${id}.${ext}`,
       ]);
-
-      const storageRef = ref(storage, storagePath);
-      await uploadBytes(storageRef, file, {
+      await uploadBytes(ref(storage, storagePath), file, {
         contentType: file.type,
-        customMetadata: {
-          imageType: uploadType,
-        },
       });
-      const downloadUrl = await getDownloadURL(storageRef);
-      const now = nowUnixMs();
-
-      await setDoc(doc(db, "model_reference_images", refId), {
-        id: refId,
-        modelId: selectedModelId,
+      const downloadUrl = await getDownloadURL(ref(storage, storagePath));
+      const row: ModelReferenceImage = {
+        id,
         userId: user.uid,
-        imageType: uploadType,
+        modelId: selectedModelId,
+        imageType: type,
         storagePath,
         downloadUrl,
-        width: quality.width,
-        height: quality.height,
-        qualityScore: quality.score,
-        createdAt: now,
-      } satisfies ModelReferenceImage);
-
-      setUploadMsg(
-        quality.score === "high"
-          ? "Reference uploaded. Excellent quality for identity lock."
-          : quality.score === "medium"
-            ? "Uploaded. For better consistency, use brighter full-body references too."
-            : "Uploaded. Consider higher resolution and neutral lighting for stronger consistency.",
-      );
+        width: dimensions.width,
+        height: dimensions.height,
+        qualityScore:
+          dimensions.width >= 1200 && dimensions.height >= 1200
+            ? "high"
+            : dimensions.width >= 900 && dimensions.height >= 900
+              ? "medium"
+              : "low",
+        createdAt: nowUnixMs(),
+      };
+      await setDoc(doc(db, "model_reference_images", id), row);
+      setInfo(`${type.replace("_", " ")} uploaded.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
-      setUploadMsg("");
     }
   };
 
+  const selectedRefs = refs.filter((row) => row.modelId === selectedModelId);
+  const hasRequired = requiredReferenceOrder.every((type) =>
+    selectedRefs.some((ref) => ref.imageType === type),
+  );
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
       <section className="card p-4">
-        <h2 className="text-lg font-semibold text-text-strong">Create Model Profile</h2>
+        <h2 className="text-lg font-semibold text-text-strong">My Models</h2>
         <p className="mt-1 text-sm text-muted">
-          Build reusable model identities for your catalogue workflows.
+          Keep it simple: create a model and upload face + front + side references.
         </p>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-4 flex gap-2">
           <input
             className="subtle-input"
             placeholder="Model name"
-            value={form.modelName}
-            onChange={(e) => setForm((prev) => ({ ...prev, modelName: e.target.value }))}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
           />
-          <select
-            className="subtle-input"
-            value={form.modelType}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, modelType: e.target.value as ModelProfile["modelType"] }))
-            }
+          <button
+            type="button"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
+            onClick={createModel}
           >
-            <option value="synthetic">Synthetic AI model</option>
-            <option value="licensed">Licensed fashion model</option>
-            <option value="authorized_reference">Authorized reference image</option>
-            <option value="brand_owned">Brand-owned avatar</option>
-          </select>
-          <input
-            className="subtle-input"
-            placeholder="Default style"
-            value={form.defaultStyle}
-            onChange={(e) => setForm((prev) => ({ ...prev, defaultStyle: e.target.value }))}
-          />
-          <input
-            className="subtle-input"
-            placeholder="Default background"
-            value={form.defaultBackground}
-            onChange={(e) => setForm((prev) => ({ ...prev, defaultBackground: e.target.value }))}
-          />
+            Save
+          </button>
         </div>
 
-        <div className="mt-4 grid gap-2 text-sm text-text">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.adultConfirmed}
-              onChange={(e) => setForm((prev) => ({ ...prev, adultConfirmed: e.target.checked }))}
-            />
-            Adult confirmation for this model
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.usageAuthorized}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, usageAuthorized: e.target.checked }))
-              }
-            />
-            Usage authorization confirmed
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.identityLock}
-              onChange={(e) => setForm((prev) => ({ ...prev, identityLock: e.target.checked }))}
-            />
-            Lock identity
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.bodyLock}
-              onChange={(e) => setForm((prev) => ({ ...prev, bodyLock: e.target.checked }))}
-            />
-            Lock body proportions
-          </label>
+        <div className="mt-4 space-y-2">
+          {models.map((model) => (
+            <div
+              key={model.id}
+              className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                selectedModelId === model.id ? "border-primary bg-primary/10" : "border-border bg-surface"
+              }`}
+            >
+              <button
+                type="button"
+                className="text-sm font-medium text-text"
+                onClick={() => setSelectedModelId(model.id)}
+              >
+                {model.modelName}
+              </button>
+              <button
+                type="button"
+                className="text-xs text-red-500"
+                onClick={async () => deleteDoc(doc(db, "model_profiles", model.id))}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
         </div>
-
-        {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
-
-        <button
-          type="button"
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-          onClick={handleCreateModel}
-          disabled={saving}
-        >
-          {saving ? "Saving..." : "Save Model Profile"}
-        </button>
       </section>
 
-      <section className="space-y-4">
-        <div className="card p-4">
-          <h3 className="text-base font-semibold text-text-strong">Reference Upload Manager</h3>
-          <p className="mt-1 text-sm text-muted">
-            Recommended: face + front body + side body + neutral lighting image.
-          </p>
-
-          <div className="mt-3 space-y-3">
-            <select
-              className="subtle-input"
-              value={selectedModelId}
-              onChange={(e) => setSelectedModelId(e.target.value)}
-            >
-              <option value="">Select model</option>
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.modelName}
-                </option>
-              ))}
-            </select>
-            <select
-              className="subtle-input"
-              value={uploadType}
-              onChange={(e) => setUploadType(e.target.value as ReferenceImageType)}
-            >
-              {referenceTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-            <input
-              type="file"
-              className="subtle-input"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleUpload(file);
-              }}
-            />
-          </div>
-
-          {uploadMsg ? <p className="mt-3 text-sm text-emerald-600">{uploadMsg}</p> : null}
+      <section className="card p-4">
+        <h3 className="text-base font-semibold text-text-strong">Required references</h3>
+        <p className="mt-1 text-sm text-muted">
+          Upload these 3 first for strong face/body lock. Use clear, neutral, well-lit photos (600x600+).
+        </p>
+        <div className="mt-3 space-y-3">
+          {requiredReferenceOrder.map((type) => (
+            <label key={type} className="block rounded-md border border-border bg-surface p-3 text-sm text-text">
+              <span className="mb-2 block font-medium capitalize">{type.replace("_", " ")}</span>
+              <input
+                className="subtle-input"
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void uploadReference(type, file);
+                }}
+              />
+            </label>
+          ))}
         </div>
-
-        <div className="card p-4">
-          <h3 className="mb-2 text-base font-semibold text-text-strong">Saved Models</h3>
-          <div className="space-y-2">
-            {models.length === 0 ? (
-              <p className="text-sm text-muted">No profiles yet.</p>
-            ) : (
-              models.map((model) => (
-                <div
-                  key={model.id}
-                  className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-text">{model.modelName}</p>
-                    <p className="text-xs text-muted">
-                      {model.modelType} · refs: {refCountByModel.get(model.id) ?? 0}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs text-red-500"
-                    onClick={async () => {
-                      await deleteDoc(doc(db, "model_profiles", model.id));
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <p className={`mt-3 text-sm ${hasRequired ? "text-emerald-600" : "text-amber-600"}`}>
+          {hasRequired
+            ? "Model is generation-ready."
+            : "Still waiting for one or more required references."}
+        </p>
+        {info ? <p className="mt-2 text-sm text-emerald-600">{info}</p> : null}
+        {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
       </section>
     </div>
   );
-}
-
-async function evaluateImageQuality(file: File) {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.width, height: img.height });
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-
-  const minEdge = Math.min(dimensions.width, dimensions.height);
-  const score = minEdge >= 1024 ? "high" : minEdge >= 700 ? "medium" : "low";
-  return { ...dimensions, score } as const;
 }

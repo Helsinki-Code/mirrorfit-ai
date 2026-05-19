@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  GalleryVerticalEnd,
+  FolderHeart,
   Images,
   LayoutDashboard,
+  MessageSquare,
   Palette,
-  Settings,
+  ShieldCheck,
+  Sparkles,
   Shirt,
-  WandSparkles,
+  Share2,
   LogOut,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
@@ -17,12 +19,14 @@ import { cn } from "@/lib/utils/cn";
 import { useAuth } from "@/providers/AuthProvider";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/models", label: "Model Library", icon: Images },
-  { href: "/garments", label: "Garment Library", icon: Shirt },
-  { href: "/studio", label: "Try-On Studio", icon: WandSparkles },
-  { href: "/generations", label: "Generations", icon: GalleryVerticalEnd },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Shoot Inbox", icon: LayoutDashboard },
+  { href: "/studio", label: "Shoot Room", icon: MessageSquare },
+  { href: "/models", label: "My Models", icon: Images },
+  { href: "/garments", label: "My Garments", icon: Shirt },
+  { href: "/prompt-rewrite", label: "Prompt Rewrite", icon: Sparkles },
+  { href: "/safety-rewrite", label: "Safety Rewrite", icon: ShieldCheck },
+  { href: "/brand-memory", label: "Brand Memory", icon: FolderHeart },
+  { href: "/share", label: "Share & Approval", icon: Share2 },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -71,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <header className="mb-4 flex items-center justify-between rounded-lg border border-border bg-panel px-4 py-3 shadow-sm">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted">Workspace</p>
-              <h1 className="text-lg font-semibold text-text-strong">MirrorFit AI Studio</h1>
+              <h1 className="text-lg font-semibold text-text-strong">MirrorFit AI Assistant</h1>
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />

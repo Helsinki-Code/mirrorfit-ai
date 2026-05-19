@@ -50,6 +50,28 @@ service cloud.firestore {
       allow delete: if signedIn() && existingOwnerMatches();
     }
 
+    match /shoot_jobs/{id} {
+      allow read, update, delete: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn() && ownerFieldMatches();
+    }
+
+    match /shoot_messages/{id} {
+      allow read: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn() && ownerFieldMatches();
+      allow update, delete: if false;
+    }
+
+    match /brand_memories/{id} {
+      allow read, update, delete: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn() && ownerFieldMatches();
+    }
+
+    match /shoot_approvals/{id} {
+      allow read: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn() && ownerFieldMatches();
+      allow update, delete: if false;
+    }
+
     match /brand_presets/{id} {
       allow read, update, delete: if signedIn() && existingOwnerMatches();
       allow create: if signedIn() && ownerFieldMatches();

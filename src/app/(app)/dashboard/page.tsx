@@ -1,85 +1,117 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, where, orderBy, limit } from "firebase/firestore";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  where,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
-import type { Generation } from "@/lib/types";
+import type { ShootJob } from "@/lib/types";
+import { nowUnixMs } from "@/lib/utils/time";
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [modelCount, setModelCount] = useState(0);
-  const [garmentCount, setGarmentCount] = useState(0);
-  const [generationCount, setGenerationCount] = useState(0);
-  const [recentGenerations, setRecentGenerations] = useState<Generation[]>([]);
+  const [jobs, setJobs] = useState<ShootJob[]>([]);
+  const [newIdea, setNewIdea] = useState("");
 
   useEffect(() => {
     if (!user) return;
-
-    const unsubscribers = [
-      onSnapshot(
-        query(collection(db, "model_profiles"), where("userId", "==", user.uid)),
-        (snapshot) => setModelCount(snapshot.size),
-      ),
-      onSnapshot(
-        query(collection(db, "garments"), where("userId", "==", user.uid)),
-        (snapshot) => setGarmentCount(snapshot.size),
-      ),
-      onSnapshot(
-        query(collection(db, "generations"), where("userId", "==", user.uid)),
-        (snapshot) => setGenerationCount(snapshot.size),
-      ),
-      onSnapshot(
-        query(
-          collection(db, "generations"),
-          where("userId", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(6),
-        ),
-        (snapshot) =>
-          setRecentGenerations(snapshot.docs.map((doc) => doc.data() as Generation)),
-      ),
-    ];
-
-    return () => unsubscribers.forEach((unsub) => unsub());
+    return onSnapshot(
+      query(collection(db, "shoot_jobs"), where("userId", "==", user.uid), orderBy("updatedAt", "desc")),
+      (snapshot) => setJobs(snapshot.docs.map((doc) => doc.data() as ShootJob)),
+    );
   }, [user]);
+
+  const activeCount = useMemo(
+    () => jobs.filter((job) => job.status === "working" || job.status === "needs_input").length,
+    [jobs],
+  );
+
+  const createJob = async () => {
+    if (!user || !newIdea.trim()) return;
+    const id = crypto.randomUUID();
+    const now = nowUnixMs();
+    const job: ShootJob = {
+      id,
+      userId: user.uid,
+      title: newIdea.length > 56 ? `${newIdea.slice(0, 56)}...` : newIdea,
+      status: "draft",
+      lastMessage: newIdea,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await setDoc(doc(db, "shoot_jobs", id), job);
+    setNewIdea("");
+  };
 
   return (
     <div className="space-y-4">
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricCard label="Saved Models" value={modelCount} />
-        <MetricCard label="Garments" value={garmentCount} />
-        <MetricCard label="Total Generations" value={generationCount} />
+      <section className="card p-4">
+        <p className="text-xs uppercase tracking-wide text-muted">Shoot Inbox</p>
+        <h2 className="mt-1 text-2xl font-semibold text-text-strong">
+          Start with one sentence
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Example: Use Meera model for my navy satin dress in catalogue style.
+        </p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <input
+            className="subtle-input"
+            value={newIdea}
+            onChange={(event) => setNewIdea(event.target.value)}
+            placeholder="Describe the shoot you want..."
+          />
+          <button
+            type="button"
+            onClick={createJob}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
+          >
+            Create Job
+          </button>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <MetricCard label="Total Jobs" value={jobs.length} />
+        <MetricCard label="Active Jobs" value={activeCount} />
+        <MetricCard
+          label="Completed"
+          value={jobs.filter((job) => job.status === "completed").length}
+        />
       </section>
 
       <section className="card p-4">
-        <h2 className="mb-4 text-lg font-semibold text-text-strong">Recent Renders</h2>
-        {recentGenerations.length === 0 ? (
-          <p className="text-sm text-muted">No renders yet. Go to Try-On Studio to generate.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted">
-                  <th className="pb-2">Generation ID</th>
-                  <th className="pb-2">Style</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentGenerations.map((item) => (
-                  <tr key={item.id} className="border-b border-border/60 text-text">
-                    <td className="py-2">{item.id.slice(0, 10)}...</td>
-                    <td className="py-2">{item.style}</td>
-                    <td className="py-2 capitalize">{item.status}</td>
-                    <td className="py-2">{new Date(item.createdAt).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <h3 className="text-base font-semibold text-text-strong">Recent Jobs</h3>
+        <div className="mt-3 space-y-2">
+          {jobs.length === 0 ? (
+            <p className="text-sm text-muted">No jobs yet.</p>
+          ) : (
+            jobs.map((job) => (
+              <Link
+                key={job.id}
+                href={`/studio?job=${job.id}`}
+                className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-3 transition-colors hover:bg-hover"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-text">{job.title}</p>
+                  <p className="text-xs text-muted">
+                    {new Date(job.updatedAt).toLocaleString()}
+                  </p>
+                </div>
+                <span className="rounded-md border border-border px-2 py-1 text-xs capitalize text-text">
+                  {job.status}
+                </span>
+              </Link>
+            ))
+          )}
+        </div>
       </section>
     </div>
   );

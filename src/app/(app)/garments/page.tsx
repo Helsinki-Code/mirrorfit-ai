@@ -1,16 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  setDoc,
-  where,
-} from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
@@ -43,19 +34,15 @@ export default function GarmentsPage() {
   const [form, setForm] = useState<CreateGarmentInput>(defaultForm);
   const [selectedGarmentId, setSelectedGarmentId] = useState("");
   const [imageType, setImageType] = useState<GarmentImage["imageType"]>("front");
+  const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) return;
-
-    const garmentQuery = query(
-      collection(db, "garments"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc"),
-    );
-
+    const garmentQuery = query(collection(db, "garments"), where("userId", "==", user.uid));
     return onSnapshot(garmentQuery, (snapshot) => {
-      const items = snapshot.docs.map((d) => d.data() as Garment);
+      const items = snapshot.docs.map((entry) => entry.data() as Garment);
+      items.sort((a, b) => b.createdAt - a.createdAt);
       setGarments(items);
       if (!selectedGarmentId && items[0]) setSelectedGarmentId(items[0].id);
     });
@@ -74,6 +61,7 @@ export default function GarmentsPage() {
     } satisfies Garment);
     setForm(defaultForm);
     setSelectedGarmentId(id);
+    setShowDetails(false);
   };
 
   const uploadGarmentImage = async (file: File) => {
@@ -111,25 +99,29 @@ export default function GarmentsPage() {
     <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
       <section className="card p-4">
         <h2 className="text-lg font-semibold text-text-strong">Garment Library</h2>
-        <p className="mt-1 text-sm text-muted">Store SKU-ready garment metadata and product images.</p>
+        <p className="mt-1 text-sm text-muted">
+          Keep it simple: save garment basics, then upload front or flat-lay references.
+        </p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <input
             className="subtle-input"
             placeholder="Product name"
             value={form.productName}
-            onChange={(e) => setForm((prev) => ({ ...prev, productName: e.target.value }))}
+            onChange={(event) => setForm((prev) => ({ ...prev, productName: event.target.value }))}
           />
           <input
             className="subtle-input"
             placeholder="SKU"
             value={form.sku}
-            onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))}
+            onChange={(event) => setForm((prev) => ({ ...prev, sku: event.target.value }))}
           />
           <select
             className="subtle-input"
             value={form.category}
-            onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value as GarmentCategory }))}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, category: event.target.value as GarmentCategory }))
+            }
           >
             {categories.map((category) => (
               <option key={category.value} value={category.value}>
@@ -139,24 +131,37 @@ export default function GarmentsPage() {
           </select>
           <input
             className="subtle-input"
-            placeholder="Fabric type"
-            value={form.fabric}
-            onChange={(e) => setForm((prev) => ({ ...prev, fabric: e.target.value }))}
-          />
-          <input
-            className="subtle-input md:col-span-2"
             placeholder="Color"
             value={form.color}
-            onChange={(e) => setForm((prev) => ({ ...prev, color: e.target.value }))}
-          />
-          <textarea
-            className="subtle-input md:col-span-2"
-            rows={3}
-            placeholder="Notes: straps, embroidery, cut, drape, transparency notes..."
-            value={form.notes}
-            onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+            onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
           />
         </div>
+
+        <button
+          type="button"
+          className="mt-3 text-xs text-primary underline underline-offset-2"
+          onClick={() => setShowDetails((prev) => !prev)}
+        >
+          {showDetails ? "Hide optional details" : "Add optional details"}
+        </button>
+
+        {showDetails ? (
+          <div className="mt-3 grid gap-3">
+            <input
+              className="subtle-input"
+              placeholder="Fabric type (optional)"
+              value={form.fabric}
+              onChange={(event) => setForm((prev) => ({ ...prev, fabric: event.target.value }))}
+            />
+            <textarea
+              className="subtle-input"
+              rows={3}
+              placeholder="Notes: straps, embroidery, cut, drape..."
+              value={form.notes}
+              onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+            />
+          </div>
+        ) : null}
 
         <button
           type="button"
@@ -174,7 +179,7 @@ export default function GarmentsPage() {
             <select
               className="subtle-input"
               value={selectedGarmentId}
-              onChange={(e) => setSelectedGarmentId(e.target.value)}
+              onChange={(event) => setSelectedGarmentId(event.target.value)}
             >
               <option value="">Select garment</option>
               {garments.map((garment) => (
@@ -186,20 +191,20 @@ export default function GarmentsPage() {
             <select
               className="subtle-input"
               value={imageType}
-              onChange={(e) => setImageType(e.target.value as GarmentImage["imageType"])}
+              onChange={(event) => setImageType(event.target.value as GarmentImage["imageType"])}
             >
               <option value="front">Front view</option>
+              <option value="flat_lay">Flat lay</option>
               <option value="back">Back view</option>
               <option value="detail">Detail shot</option>
-              <option value="flat_lay">Flat lay</option>
               <option value="transparent_png">Transparent PNG</option>
             </select>
             <input
               className="subtle-input"
               type="file"
               accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
+              onChange={(event) => {
+                const file = event.target.files?.[0];
                 if (file) void uploadGarmentImage(file);
               }}
             />
@@ -221,7 +226,7 @@ export default function GarmentsPage() {
                   <div>
                     <p className="text-sm font-medium text-text">{garment.productName}</p>
                     <p className="text-xs text-muted">
-                      {garment.category} · {garment.color || "no color"}
+                      {garment.category} - {garment.color || "no color"}
                     </p>
                   </div>
                   <button

@@ -33,8 +33,8 @@ export function buildGenerationPrompt(params: {
     `Garment reference URLs: ${garmentImageUrls.join(", ") || "none"}.`,
     `Garment requirements: preserve color (${garment.color}), fabric (${garment.fabric}), seam integrity, neckline, sleeves/straps, and hemline.`,
     `Strict garment fidelity: replicate the same garment construction from references; do not invent alternative cuts or fabric behavior.`,
-    `Scene setup: style "${request.style}", background "${request.background}", lighting "${request.lighting}", pose "${request.pose}", output ratio "${request.outputRatio}".`,
+    `Scene setup: clean professional e-commerce catalogue style, neutral studio background, softbox commercial lighting, natural standing pose, portrait-oriented product framing.`,
     `Safety and tone: adult, fully clothed, tasteful, non-explicit, product-focused, commercial e-commerce presentation.`,
-    `User direction: ${request.prompt}`,
+    `User direction: ${request.userMessage}`,
   ].join("\n");
 }

@@ -51,7 +51,7 @@ export function classifySafety(
   request: CreateGenerationRequest,
   model: ModelProfile,
 ): SafetyClassification {
-  const promptLower = request.prompt.toLowerCase();
+  const promptLower = request.userMessage.toLowerCase();
 
   const sexualIntent = SEXUAL_EXPLICIT_KEYWORDS.some((word) =>
     promptLower.includes(word),
@@ -59,7 +59,7 @@ export function classifySafety(
   const minorRisk = MINOR_RISK_KEYWORDS.some((word) => promptLower.includes(word));
   const explicitNudity = /nude|nudity|naked/.test(promptLower);
 
-  const category = detectCategoryFromText(`${request.style} ${request.prompt}`);
+  const category = detectCategoryFromText(request.userMessage);
   const modelAgeStatus = model.adultConfirmed ? "adult" : "unknown";
   const authorizedModelReference = model.usageAuthorized;
 
@@ -81,7 +81,7 @@ export function classifySafety(
     requestType: "fashion_try_on",
     modelAgeStatus: minorRisk ? "minor_risk" : modelAgeStatus,
     garmentCategory: category,
-    presentationStyle: request.style,
+    presentationStyle: "catalogue",
     sexualIntent,
     explicitNudity,
     minorRisk,
