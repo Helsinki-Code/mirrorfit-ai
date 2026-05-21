@@ -71,9 +71,7 @@ function parseOutfitCsv(csv: string): OutfitRow[] {
 export default function BulkGeneratorPage() {
   const { user } = useAuth();
   const [models, setModels] = useState<ModelProfile[]>([]);
-  const [garments, setGarments] = useState<Garment[]>([]);
   const [modelId, setModelId] = useState("");
-  const [defaultGarmentId, setDefaultGarmentId] = useState("");
   const [posesPerOutfit, setPosesPerOutfit] = useState(2);
   const [imagesPerPose, setImagesPerPose] = useState(2);
   const [outfitTextList, setOutfitTextList] = useState("");
@@ -96,19 +94,8 @@ export default function BulkGeneratorPage() {
       },
     );
 
-    const unsubGarments = onSnapshot(
-      query(collection(db, "garments"), where("userId", "==", user.uid)),
-      (snapshot) => {
-        const rows = snapshot.docs.map((entry) => entry.data() as Garment);
-        rows.sort((a, b) => b.createdAt - a.createdAt);
-        setGarments(rows);
-        setDefaultGarmentId((prev) => prev || rows[0]?.id || "");
-      },
-    );
-
     return () => {
       unsubModels();
-      unsubGarments();
     };
   }, [user]);
 
@@ -147,18 +134,13 @@ export default function BulkGeneratorPage() {
       setError("Add at least one outfit line or CSV row.");
       return;
     }
-    if (!defaultGarmentId && !parsedOutfitRows.some((row) => row.garmentId)) {
-      setError("Select a default garment or provide garmentId in CSV rows.");
-      return;
-    }
-
     setRunning(true);
     try {
       const token = await user.getIdToken();
       let count = 0;
 
       for (const outfit of parsedOutfitRows) {
-        const effectiveGarmentId = outfit.garmentId || defaultGarmentId || undefined;
+        const effectiveGarmentId = outfit.garmentId;
         for (let poseIndex = 1; poseIndex <= posesPerOutfit; poseIndex += 1) {
           for (let imageIndex = 1; imageIndex <= imagesPerPose; imageIndex += 1) {
             count += 1;
@@ -346,7 +328,7 @@ export default function BulkGeneratorPage() {
           <p className="font-medium text-text-strong">Agent prompt sequence</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-text">
             <li>Select the model profile</li>
-            <li>Select default garment (optional if CSV includes garmentId per row)</li>
+            <li>Provide outfit text and optional row-level garment references</li>
             <li>Set poses per outfit and images per pose</li>
             <li>Paste outfit lines or CSV rows, then run</li>
           </ol>
@@ -369,18 +351,6 @@ export default function BulkGeneratorPage() {
                 </option>
               ))}
             </select>
-            <select
-              className="subtle-input"
-              value={defaultGarmentId}
-              onChange={(event) => setDefaultGarmentId(event.target.value)}
-            >
-              <option value="">Select default garment</option>
-              {garments.map((garment) => (
-                <option key={garment.id} value={garment.id}>
-                  {garment.productName}
-                </option>
-              ))}
-            </select>
             <input
               className="subtle-input"
               type="number"
@@ -399,6 +369,9 @@ export default function BulkGeneratorPage() {
               onChange={(event) => setImagesPerPose(Math.max(1, Number(event.target.value) || 1))}
               aria-label="Images per pose"
             />
+            <div className="subtle-input flex items-center text-xs text-muted md:col-span-2">
+              Outfit image references are applied per row only. No hidden default outfit fallback.
+            </div>
           </div>
 
           <textarea
@@ -476,7 +449,7 @@ export default function BulkGeneratorPage() {
                 >
                   <p className="font-medium text-text-strong">{index + 1}. {item.outfitText}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    Garment source: {item.garmentId ?? "default selection"}
+                    Garment source: {item.garmentId ?? "prompt-only"}
                   </p>
                 </div>
               ))
