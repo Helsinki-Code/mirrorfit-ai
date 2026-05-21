@@ -136,6 +136,44 @@ function referencePackForAttempt(packed: PackedReferences, attempt: number) {
   };
 }
 
+function missingRequiredRefs(packed: PackedReferences) {
+  const missing: string[] = [];
+  if (!packed.modelReferenceTypes.includes("face")) missing.push("face");
+  if (!packed.modelReferenceTypes.includes("front_body")) missing.push("front_body");
+  if (!packed.modelReferenceTypes.includes("side_body")) missing.push("side_body");
+  if (
+    !packed.garmentReferenceTypes.includes("front") &&
+    !packed.garmentReferenceTypes.includes("flat_lay")
+  ) {
+    missing.push("front_or_flat_lay");
+  }
+  return missing;
+}
+
+function humanFailureMessage(params: {
+  missingRefs: string[];
+  lastBlockedReason?: string;
+}) {
+  if (params.missingRefs.length) {
+    return `I could not complete this render yet. Missing required references: ${params.missingRefs.join(", ")}.`;
+  }
+
+  const reason = (params.lastBlockedReason ?? "").toLowerCase();
+  if (reason.includes("429") || reason.includes("too many")) {
+    return "I could not complete this render yet because image providers are rate-limiting requests right now. Please retry in a short while.";
+  }
+  if (reason.includes("safety") || reason.includes("rejected") || reason.includes("blocked")) {
+    return "I could not complete this render yet because the request was blocked by safety checks. Please retry with a cleaner catalogue-focused prompt.";
+  }
+  if (reason.includes("401") || reason.includes("403") || reason.includes("missing fal_key")) {
+    return "I could not complete this render due to a backend configuration issue. Please try again after deployment settings are verified.";
+  }
+  if (reason.includes("abort") || reason.includes("timeout")) {
+    return "I could not complete this render because generation timed out. Please retry; the agent will attempt alternate engines.";
+  }
+  return "I could not complete this render yet due to temporary generation failures across engines. Please retry now.";
+}
+
 async function generationWorker(params: {
   engineId: EngineId;
   attempt: number;
@@ -183,6 +221,7 @@ Output must remain tasteful, adult, and product-catalog focused.`;
   let workingPrompt = strictPrompt;
   const attempts: GenerationAttempt[] = [];
   let bestAttempt: GenerationAttempt | null = null;
+  const missingRefs = missingRequiredRefs(input.packedReferences);
 
   for (let attempt = 1; attempt <= retryCap; attempt += 1) {
     const engineId = modelRouter(attempt);
@@ -245,7 +284,9 @@ Output must remain tasteful, adult, and product-catalog focused.`;
   return {
     state: "failed",
     attempts,
-    userFacingMessage:
-      "I could not complete this render yet. Please upload neutral face/front/side model references and one clear front garment image, then retry.",
+    userFacingMessage: humanFailureMessage({
+      missingRefs,
+      lastBlockedReason: attempts.at(-1)?.blockedReason,
+    }),
   };
 }
