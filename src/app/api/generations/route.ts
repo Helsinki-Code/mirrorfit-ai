@@ -366,8 +366,16 @@ export async function POST(request: Request) {
       garmentReferenceTypes.includes("front") || garmentReferenceTypes.includes("flat_lay");
 
     if (!hasFace || !hasFrontBody || !hasSideBody || !hasPrimaryGarment) {
-      const message =
-        "Before generating, please upload required references: model face + full-body front + full-body side, and one garment front/flat-lay image.";
+      const missingModelRefs = [
+        !hasFace ? "face" : null,
+        !hasFrontBody ? "front_body" : null,
+        !hasSideBody ? "side_body" : null,
+      ].filter((value): value is string => Boolean(value));
+      const missingGarmentRefs = !hasPrimaryGarment ? ["front_or_flat_lay"] : [];
+      const missingDetail = [...missingModelRefs, ...missingGarmentRefs];
+      const message = missingDetail.length
+        ? `I could not complete this render yet. Missing required references for current selection: ${missingDetail.join(", ")}.`
+        : "I could not complete this render yet due to required reference validation.";
       await updateDocSafe({
         docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
         collection: "shoot_jobs",
@@ -388,6 +396,13 @@ export async function POST(request: Request) {
         status: "needs_input",
         shootJobId,
         message,
+        missing: missingDetail,
+        debug: {
+          modelProfileId,
+          garmentId,
+          modelReferenceTypes,
+          garmentReferenceTypes,
+        },
       });
     }
 
