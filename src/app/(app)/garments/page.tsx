@@ -97,8 +97,9 @@ export default function GarmentsPage() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-      <section className="card p-4">
-        <h2 className="text-lg font-semibold text-text-strong">Garment Library</h2>
+      <section className="panel p-5">
+        <p className="section-eyebrow">Garment Library</p>
+        <h2 className="mt-1 text-lg font-semibold text-text-strong">My Garments</h2>
         <p className="mt-1 text-sm text-muted">
           Keep it simple: save garment basics, then upload front or flat-lay references.
         </p>
@@ -165,7 +166,7 @@ export default function GarmentsPage() {
 
         <button
           type="button"
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
+          className="focus-ring mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
           onClick={createGarment}
         >
           Save Garment
@@ -173,8 +174,9 @@ export default function GarmentsPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="card p-4">
-          <h3 className="text-base font-semibold text-text-strong">Upload Garment Images</h3>
+        <div className="panel p-5">
+          <p className="section-eyebrow">References</p>
+          <h3 className="mt-1 text-base font-semibold text-text-strong">Upload Garment Images</h3>
           <div className="mt-3 space-y-3">
             <select
               className="subtle-input"
@@ -212,16 +214,16 @@ export default function GarmentsPage() {
           </div>
         </div>
 
-        <div className="card p-4">
+        <div className="panel p-5">
           <h3 className="mb-2 text-base font-semibold text-text-strong">Saved Garments</h3>
           <div className="space-y-2">
             {garments.length === 0 ? (
-              <p className="text-sm text-muted">No garments yet.</p>
+              <div className="empty-state text-sm">No garments yet.</div>
             ) : (
               garments.map((garment) => (
                 <div
                   key={garment.id}
-                  className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
                 >
                   <div>
                     <p className="text-sm font-medium text-text">{garment.productName}</p>
@@ -230,7 +232,7 @@ export default function GarmentsPage() {
                     </p>
                   </div>
                   <button
-                    className="text-xs text-red-500"
+                    className="focus-ring rounded-sm text-xs text-red-500"
                     type="button"
                     onClick={async () => deleteDoc(doc(db, "garments", garment.id))}
                   >

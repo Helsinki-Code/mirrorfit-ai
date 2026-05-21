@@ -51,11 +51,10 @@ export default function BrandMemoryPage() {
   if (!memory) return null;
 
   return (
-    <div className="card p-4">
-      <h2 className="text-lg font-semibold text-text-strong">Brand Memory</h2>
-      <p className="mt-1 text-sm text-muted">
-        Save defaults so chat jobs need fewer inputs each time.
-      </p>
+    <div className="panel p-5 md:p-6">
+      <p className="section-eyebrow">Brand Memory</p>
+      <h2 className="mt-1 text-xl font-semibold text-text-strong">Production Defaults</h2>
+      <p className="mt-1 text-sm text-muted">Save preferences so each new shoot needs fewer inputs.</p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <input
@@ -148,17 +147,20 @@ export default function BrandMemoryPage() {
       </div>
 
       <div className="mt-4">
-        <p className="text-sm font-medium text-text-strong">Approved model set</p>
+        <div className="section-header">
+          <p className="text-sm font-semibold text-text-strong">Approved Model Set</p>
+          <span className="status-pill">{memory.approvedModelIds.length} selected</span>
+        </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {models.length === 0 ? (
-            <p className="text-xs text-muted">No models yet.</p>
+            <div className="empty-state text-sm sm:col-span-2">No models yet.</div>
           ) : (
             models.map((model) => {
               const checked = memory.approvedModelIds.includes(model.id);
               return (
                 <label
                   key={model.id}
-                  className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text"
+                  className="focus-ring flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text"
                 >
                   <input
                     type="checkbox"
@@ -183,7 +185,7 @@ export default function BrandMemoryPage() {
 
       <button
         type="button"
-        className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
+        className="focus-ring mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm"
         onClick={async () => {
           if (!user) return;
           const payload: BrandMemory = {
@@ -199,7 +201,7 @@ export default function BrandMemoryPage() {
       >
         Save Brand Memory
       </button>
-      {saved ? <p className="mt-2 text-sm text-emerald-600">Saved.</p> : null}
+      {saved ? <p className="mt-2 text-sm text-success">Saved.</p> : null}
     </div>
   );
 }

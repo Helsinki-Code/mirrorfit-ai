@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1040" role="img" aria-labelledby="title desc">
+  <title id="title">AI Fashion Catalogue Hero Visual</title>
+  <desc id="desc">Editorial fashion production scene with model silhouette, garment rail, and studio lighting tones.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111719"/>
+      <stop offset="55%" stop-color="#1a2428"/>
+      <stop offset="100%" stop-color="#2a3a33"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3cc7ad"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="52%" cy="35%" r="48%">
+      <stop offset="0%" stop-color="#3cc7ad" stop-opacity=".28"/>
+      <stop offset="100%" stop-color="#3cc7ad" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="1040" fill="url(#bg)"/>
+  <rect width="1600" height="1040" fill="url(#halo)"/>
+  <g opacity=".22" stroke="#6a7a72" stroke-width="1">
+    <path d="M0 860h1600M0 760h1600M0 660h1600M0 560h1600"/>
+    <path d="M260 0v1040M520 0v1040M780 0v1040M1040 0v1040M1300 0v1040"/>
+  </g>
+  <g transform="translate(930 210)">
+    <rect x="0" y="0" width="520" height="610" rx="26" fill="#f2f6f7"/>
+    <rect x="32" y="32" width="456" height="546" rx="20" fill="#dfe9eb"/>
+    <ellipse cx="260" cy="130" rx="66" ry="66" fill="#111719"/>
+    <path d="M176 275c0-68 53-122 119-122h0c66 0 119 54 119 122v226H176z" fill="#0f766e"/>
+    <path d="M258 248h72l17 50h-106z" fill="#12282b"/>
+    <rect x="56" y="80" width="116" height="16" rx="8" fill="#0f766e" opacity=".5"/>
+    <rect x="56" y="108" width="170" height="12" rx="6" fill="#0f766e" opacity=".35"/>
+  </g>
+  <g transform="translate(120 170)">
+    <rect x="0" y="0" width="720" height="700" rx="30" fill="#141f22" stroke="#35524d"/>
+    <path d="M80 145h560" stroke="#6bbfae" stroke-width="8" stroke-linecap="round"/>
+    <g fill="#102327">
+      <path d="M140 160h74v172h-74z"/>
+      <path d="M264 160h74v210h-74z"/>
+      <path d="M388 160h74v186h-74z"/>
+      <path d="M512 160h74v226h-74z"/>
+    </g>
+    <g fill="url(#accent)">
+      <path d="M152 160h50v116h-50z"/>
+      <path d="M276 160h50v142h-50z"/>
+      <path d="M400 160h50v128h-50z"/>
+      <path d="M524 160h50v156h-50z"/>
+    </g>
+    <rect x="60" y="470" width="600" height="170" rx="18" fill="#0f1518" stroke="#2c4241"/>
+    <rect x="88" y="506" width="210" height="18" rx="9" fill="#3cc7ad"/>
+    <rect x="88" y="537" width="330" height="12" rx="6" fill="#607b7e"/>
+    <rect x="88" y="562" width="280" height="12" rx="6" fill="#607b7e"/>
+  </g>
+</svg>

@@ -22,13 +22,7 @@ const LOCAL_STORAGE_KEY = "mirrorfit_theme";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { profile, user, updateThemePreference } = useAuth();
-  const [localTheme, setLocalTheme] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "light";
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY) as ThemeMode | null;
-    if (saved === "light" || saved === "dark") return saved;
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return prefersDark ? "dark" : "light";
-  });
+  const [localTheme, setLocalTheme] = useState<ThemeMode>("light");
 
   const theme = profile?.theme ?? localTheme;
 

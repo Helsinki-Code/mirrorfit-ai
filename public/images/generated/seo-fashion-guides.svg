@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">Fashion Ecommerce Guide Visual</title>
+  <desc id="desc">Reference visual for SEO guide pages showing model and garment data mapped to approved catalogue outputs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#11181b"/>
+      <stop offset="100%" stop-color="#1f2f31"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f7f9f9"/>
+      <stop offset="100%" stop-color="#e7eef0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="980" fill="url(#bg)"/>
+  <g transform="translate(120 118)">
+    <rect x="0" y="0" width="1360" height="744" rx="28" fill="#182327" stroke="#2d4448"/>
+    <rect x="48" y="48" width="390" height="648" rx="20" fill="url(#card)"/>
+    <rect x="474" y="48" width="844" height="302" rx="20" fill="url(#card)"/>
+    <rect x="474" y="394" width="844" height="302" rx="20" fill="url(#card)"/>
+    <rect x="86" y="88" width="292" height="18" rx="9" fill="#0f766e"/>
+    <rect x="86" y="118" width="204" height="12" rx="6" fill="#657d84"/>
+    <rect x="86" y="144" width="248" height="12" rx="6" fill="#657d84"/>
+    <rect x="86" y="200" width="312" height="84" rx="16" fill="#0f766e"/>
+    <rect x="86" y="304" width="312" height="84" rx="16" fill="#0f766e"/>
+    <rect x="86" y="408" width="312" height="84" rx="16" fill="#0f766e"/>
+    <rect x="86" y="512" width="312" height="84" rx="16" fill="#0f766e"/>
+    <g fill="#0f766e">
+      <rect x="514" y="88" width="312" height="18" rx="9"/>
+      <rect x="514" y="434" width="332" height="18" rx="9"/>
+    </g>
+    <g fill="#f59e0b" opacity=".84">
+      <circle cx="1140" cy="198" r="64"/>
+      <circle cx="1140" cy="544" r="64"/>
+    </g>
+  </g>
+</svg>

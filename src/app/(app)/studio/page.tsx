@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import { ImageGeneration } from "@/components/studio/ImageGeneration";
 import { useAuth } from "@/providers/AuthProvider";
 import type {
   CreateGenerationRequest,
@@ -27,6 +28,13 @@ const quickFixChips: Array<{
   { label: "Generate back view", value: "generate_back_view" },
 ];
 
+function roleLabel(role: ShootMessage["role"]) {
+  if (role === "assistant") return "MirrorFit Agent";
+  if (role === "user") return "You";
+  if (role === "reviewer") return "Reviewer";
+  return "System";
+}
+
 export default function StudioPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
@@ -41,6 +49,7 @@ export default function StudioPage() {
   const [garmentId, setGarmentId] = useState("");
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
+  const [generationSequence, setGenerationSequence] = useState(0);
   const [error, setError] = useState("");
   const [serverMissing, setServerMissing] = useState<string[]>([]);
 
@@ -162,6 +171,7 @@ export default function StudioPage() {
     },
   ) => {
     if (!user || !shootJobId) return;
+    setGenerationSequence((current) => current + 1);
     setWorking(true);
     setError("");
 
@@ -222,33 +232,40 @@ export default function StudioPage() {
 
   if (!shootJobId) {
     return (
-      <div className="card p-6 text-sm text-muted">
+      <div className="empty-state text-sm">
         Open a job from Shoot Inbox to start the conversational shoot room.
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="space-y-4">
-        <div className="card p-5">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted">Chat Shoot Room</p>
-          <h2 className="mt-1 text-xl font-semibold text-text-strong">
+        <div className="panel p-5">
+          <p className="section-eyebrow">Chat Shoot Room</p>
+          <h2 className="editorial-title mt-1 text-3xl text-text-strong">
             {job?.title ?? "Production Thread"}
           </h2>
           <p className="mt-1 text-sm text-muted">
             Describe the shoot naturally. I will handle the structure in the background.
           </p>
+          <div className="mt-3 rounded-md border border-border bg-surface px-3 py-2 text-xs text-text">
+            <span className="font-semibold text-text-strong">Agent online:</span>{" "}
+            I check missing inputs, run generation retries, and return the best catalogue result.
+          </div>
         </div>
 
         {missingCards.length > 0 ? (
-          <div className="card p-5">
-            <h3 className="text-sm font-semibold text-text-strong">Missing Info Cards</h3>
-            <div className="mt-3 grid gap-2">
+          <div className="panel p-5">
+            <div className="section-header">
+              <h3 className="text-sm font-semibold text-text-strong">Missing Info Cards</h3>
+              <span className="status-pill">needs input</span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {missingCards.map((card) => (
                 <div
                   key={card}
-                  className="rounded-lg border border-amber-500/35 bg-amber-100/25 px-3 py-2 text-sm text-text"
+                  className="rounded-md border border-amber-500/35 bg-amber-100/25 px-3 py-2 text-sm text-text"
                 >
                   {card}
                 </div>
@@ -257,30 +274,37 @@ export default function StudioPage() {
           </div>
         ) : null}
 
-        <div className="card p-5">
+        <div className="panel p-5">
           <div className="space-y-3.5">
             {messages.length === 0 ? (
-              <p className="text-sm text-muted">No messages yet. Send your first shoot request.</p>
+              <div className="thread-bubble thread-bubble-assistant text-sm">
+                <p className="mb-1 text-xs uppercase tracking-wide text-muted">MirrorFit Agent</p>
+                I am ready. Tell me the shoot request naturally, and I will ask only what is missing.
+              </div>
             ) : (
               messages.map((item) => (
                 <div
                   key={item.id}
-                  className={`rounded-lg border px-3.5 py-3 text-sm ${
+                  className={`thread-bubble ${
                     item.role === "user"
-                      ? "border-border bg-surface text-text"
-                      : "border-primary/25 bg-primary/10 text-text-strong"
+                      ? "thread-bubble-user"
+                      : "thread-bubble-assistant"
                   }`}
                 >
-                  <p className="mb-1 text-xs uppercase tracking-wide text-muted">{item.role}</p>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-muted">
+                    {roleLabel(item.role)}
+                  </p>
                   <p>{item.content}</p>
                   {item.imageUrl ? (
-                    <Image
-                      src={item.imageUrl}
-                      alt="Generated output"
-                      width={600}
-                      height={760}
-                      className="mt-3 h-auto w-full rounded-lg border border-border object-cover shadow-[0_14px_36px_rgba(4,12,24,0.22)]"
-                    />
+                    <div className="media-frame mt-3">
+                      <Image
+                        src={item.imageUrl}
+                        alt="Generated output"
+                        width={600}
+                        height={760}
+                        className="h-auto w-full object-cover"
+                      />
+                    </div>
                   ) : null}
                 </div>
               ))
@@ -288,8 +312,8 @@ export default function StudioPage() {
           </div>
         </div>
 
-        <div className="card p-5">
-          <div className="grid gap-2 sm:grid-cols-2">
+        <div className="panel p-5">
+          <div className="grid gap-2 md:grid-cols-2">
             <select
               className="subtle-input"
               value={modelId}
@@ -317,7 +341,7 @@ export default function StudioPage() {
           </div>
 
           <textarea
-            className="subtle-input mt-3 min-h-[96px]"
+            className="subtle-input mt-3 min-h-[110px]"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             placeholder="Use Meera model and place this navy satin dress in premium catalogue lighting."
@@ -327,7 +351,7 @@ export default function StudioPage() {
             type="button"
             onClick={submitMessage}
             disabled={working}
-            className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
+            className="focus-ring mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
           >
             {working ? "Working..." : "Generate"}
           </button>
@@ -335,32 +359,28 @@ export default function StudioPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="card p-5">
+        <div className="panel p-5">
           <h3 className="text-base font-semibold text-text-strong">Result Message Thread</h3>
-          <div className="relative mt-3 flex min-h-[340px] items-center justify-center rounded-lg border border-border bg-surface">
-            {latestImage ? (
-              <Image
-                src={latestImage}
-                alt="Latest render"
-                width={540}
-                height={720}
-                className="h-auto max-h-[320px] w-auto rounded-lg object-contain shadow-[0_18px_52px_rgba(5,14,30,0.25)]"
-              />
-            ) : (
-              <p className="text-sm text-muted">Latest generated image appears here.</p>
-            )}
-            {working ? (
-              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 backdrop-blur-[1px]">
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  Generating...
-                </div>
+          <div className="mt-3">
+            <ImageGeneration isActive={working} generationKey={generationSequence}>
+              <div className="flex min-h-[340px] items-center justify-center rounded-lg border border-border bg-surface p-2">
+                {latestImage ? (
+                  <Image
+                    src={latestImage}
+                    alt="Latest generated fashion catalogue render in MirrorFit Studio"
+                    width={540}
+                    height={720}
+                    className="h-auto max-h-[320px] w-auto rounded-lg object-contain shadow-[0_18px_52px_rgba(5,14,30,0.25)]"
+                  />
+                ) : (
+                  <p className="text-sm text-muted">Latest generated image appears here.</p>
+                )}
               </div>
-            ) : null}
+            </ImageGeneration>
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="panel p-5">
           <h3 className="text-base font-semibold text-text-strong">Quick Fix Chips</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {quickFixChips.map((chip) => (
@@ -376,7 +396,7 @@ export default function StudioPage() {
                     quickFixAction: chip.value,
                   });
                 }}
-                className="pill-btn px-3 py-2 text-xs disabled:opacity-60"
+                className="action-chip focus-ring disabled:opacity-60"
               >
                 {chip.label}
               </button>

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
+import { MarketingShell } from "@/components/marketing/MarketingShell";
 
 export const metadata: Metadata = {
   title: "Pricing | MirrorFit AI",
@@ -38,19 +40,33 @@ const plans = [
 
 export default function PricingPage() {
   return (
-    <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-10 md:px-6">
-      <section className="card p-6 md:p-8">
-        <p className="text-xs uppercase tracking-wide text-muted">MirrorFit AI</p>
+    <MarketingShell>
+      <main className="mx-auto w-full max-w-6xl">
+      <section className="panel overflow-hidden p-0">
+        <div className="grid lg:grid-cols-[1fr_1fr]">
+          <div className="p-6 md:p-8">
+        <p className="section-eyebrow">MirrorFit AI</p>
         <h1 className="mt-2 text-3xl font-semibold text-text-strong md:text-4xl">Pricing</h1>
         <p className="mt-3 max-w-3xl text-text">
           Choose a plan based on catalogue volume and team workflow. Pricing is structured for
           fashion ecommerce teams moving from shoot-heavy production to AI-assisted throughput.
         </p>
+          </div>
+          <div className="media-frame m-4">
+            <Image
+              src="/images/generated/pricing-strategy-board.svg"
+              alt="Fashion ecommerce planning desk with budget notes and production calendar"
+              width={1400}
+              height={980}
+              className="h-full min-h-[220px] w-full object-cover"
+            />
+          </div>
+        </div>
       </section>
 
       <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {plans.map((plan) => (
-          <article key={plan.name} className="card p-6">
+          <article key={plan.name} className="panel p-6">
             <h2 className="text-xl font-semibold text-text-strong">{plan.name}</h2>
             <p className="mt-2 text-sm font-medium text-primary">{plan.price}</p>
             <ul className="mt-4 space-y-2 text-sm text-text">
@@ -64,7 +80,7 @@ export default function PricingPage() {
         ))}
       </section>
 
-      <section className="mt-4 card p-6">
+      <section className="mt-4 panel p-6">
         <h2 className="text-lg font-semibold text-text-strong">Next Steps</h2>
         <p className="mt-2 text-sm text-text">
           Start with one model profile and a small garment set, validate output quality, then scale
@@ -79,7 +95,7 @@ export default function PricingPage() {
           </Link>
         </div>
       </section>
-    </main>
+      </main>
+    </MarketingShell>
   );
 }
-

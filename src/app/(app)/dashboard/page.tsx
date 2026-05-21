@@ -53,25 +53,30 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <section className="card p-5">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted">Shoot Inbox</p>
-        <h2 className="mt-1 text-2xl font-semibold text-text-strong">
+      <section className="panel p-5 md:p-6">
+        <p className="section-eyebrow">Shoot Inbox</p>
+        <h2 className="editorial-title mt-1 text-3xl text-text-strong">
           Start with one sentence
         </h2>
         <p className="mt-1 text-sm text-muted">
-          Example: Use Meera model for my navy satin dress in catalogue style.
+          Describe what you want. We will ask only what is missing.
         </p>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <input
-            className="subtle-input"
-            value={newIdea}
-            onChange={(event) => setNewIdea(event.target.value)}
-            placeholder="Describe the shoot you want..."
-          />
+        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="space-y-2">
+            <input
+              className="subtle-input"
+              value={newIdea}
+              onChange={(event) => setNewIdea(event.target.value)}
+              placeholder="Use Rishitha model for black swimwear in clean catalogue lighting..."
+            />
+            <p className="text-xs text-muted">
+              Tip: mention model, garment, and output context in one line.
+            </p>
+          </div>
           <button
             type="button"
             onClick={createJob}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm"
+            className="focus-ring h-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm"
           >
             Create Job
           </button>
@@ -87,17 +92,20 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section className="card p-5">
-        <h3 className="text-base font-semibold text-text-strong">Recent Jobs</h3>
+      <section className="panel p-5">
+        <div className="section-header">
+          <h3 className="text-base font-semibold text-text-strong">Recent Jobs</h3>
+          <span className="section-eyebrow !text-[0.58rem]">{jobs.length} total</span>
+        </div>
         <div className="mt-3 space-y-2.5">
           {jobs.length === 0 ? (
-            <p className="text-sm text-muted">No jobs yet.</p>
+            <div className="empty-state text-sm">No jobs yet.</div>
           ) : (
             jobs.map((job) => (
               <Link
                 key={job.id}
                 href={`/studio?job=${job.id}`}
-                className="flex items-center justify-between rounded-lg border border-border bg-surface px-3.5 py-3 transition-colors hover:bg-hover"
+                className="focus-ring flex items-center justify-between rounded-lg border border-border bg-surface px-3.5 py-3 transition-colors hover:bg-hover"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-text">{job.title}</p>
@@ -105,12 +113,24 @@ export default function DashboardPage() {
                     {new Date(job.updatedAt).toLocaleString()}
                   </p>
                 </div>
-                <span className="rounded-md border border-border bg-panel px-2 py-1 text-xs capitalize text-text">
+                <span className="status-pill">
                   {job.status}
                 </span>
               </Link>
             ))
           )}
+        </div>
+      </section>
+
+      <section className="panel p-5">
+        <div className="section-header">
+          <div>
+            <p className="section-eyebrow">Automation</p>
+            <h3 className="text-base font-semibold text-text-strong">Need outfit batches?</h3>
+          </div>
+          <Link href="/bulk-generator" className="pill-btn px-3 py-1.5 text-sm">
+            Open Bulk Generator
+          </Link>
         </div>
       </section>
     </div>
@@ -119,8 +139,8 @@ export default function DashboardPage() {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="card p-4">
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+    <div className="panel p-4">
+      <p className="section-eyebrow !text-[0.62rem]">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-text-strong">{value}</p>
     </div>
   );

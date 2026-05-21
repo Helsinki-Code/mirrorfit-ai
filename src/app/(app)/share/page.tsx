@@ -86,8 +86,9 @@ export default function SharePage() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-      <section className="card p-4">
-        <h2 className="text-lg font-semibold text-text-strong">Share & Approval</h2>
+      <section className="panel p-5">
+        <p className="section-eyebrow">Collaboration</p>
+        <h2 className="mt-1 text-lg font-semibold text-text-strong">Share & Approval</h2>
         <p className="mt-1 text-sm text-muted">
           Review the same shoot thread, approve/reject, or request revisions.
         </p>
@@ -116,21 +117,21 @@ export default function SharePage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white"
+            className="focus-ring rounded-md bg-success px-4 py-2 text-sm font-medium text-white"
             onClick={async () => writeDecision("approved")}
           >
             Approve
           </button>
           <button
             type="button"
-            className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white"
+            className="focus-ring rounded-md bg-warning px-4 py-2 text-sm font-medium text-white"
             onClick={async () => writeDecision("changes_requested")}
           >
             Request Changes
           </button>
           <button
             type="button"
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white"
+            className="focus-ring rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white"
             onClick={async () => writeDecision("rejected")}
           >
             Reject
@@ -138,24 +139,24 @@ export default function SharePage() {
         </div>
 
         {selectedJob ? (
-          <p className="mt-3 text-xs text-muted">
+          <p className="meta-row mt-3">
             Current status: <span className="capitalize text-text">{selectedJob.status}</span>
           </p>
         ) : null}
-        {info ? <p className="mt-2 text-sm text-emerald-600">{info}</p> : null}
+        {info ? <p className="mt-2 text-sm text-success">{info}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
       </section>
 
-      <section className="card p-4">
+      <section className="panel p-5">
         <h3 className="text-base font-semibold text-text-strong">Immutable Event Log</h3>
         <div className="mt-3 space-y-2">
           {approvals.length === 0 ? (
-            <p className="text-sm text-muted">No approval events yet.</p>
+            <div className="empty-state text-sm">No approval events yet.</div>
           ) : (
             approvals.map((approval) => (
               <div
                 key={approval.id}
-                className="rounded-md border border-border bg-surface px-3 py-2 text-sm"
+                className="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               >
                 <p className="capitalize text-text-strong">{approval.decision.replace("_", " ")}</p>
                 <p className="text-xs text-muted">{new Date(approval.createdAt).toLocaleString()}</p>

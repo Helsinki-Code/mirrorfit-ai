@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">Pricing Strategy Board</title>
+  <desc id="desc">Business planning board for fashion ecommerce pricing and production scaling decisions.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f7f7"/>
+      <stop offset="100%" stop-color="#edf1f2"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="980" fill="url(#bg)"/>
+  <g transform="translate(120 120)">
+    <rect x="0" y="0" width="1360" height="740" rx="30" fill="#ffffff" stroke="#d4dfe1"/>
+    <rect x="60" y="70" width="380" height="580" rx="20" fill="#f2f7f7" stroke="#d4dfe1"/>
+    <rect x="490" y="70" width="810" height="268" rx="20" fill="#152024" stroke="#2f4346"/>
+    <rect x="490" y="382" width="390" height="268" rx="20" fill="#f2f7f7" stroke="#d4dfe1"/>
+    <rect x="910" y="382" width="390" height="268" rx="20" fill="#f2f7f7" stroke="#d4dfe1"/>
+    <rect x="102" y="120" width="210" height="20" rx="10" fill="#0f766e"/>
+    <rect x="102" y="154" width="290" height="12" rx="6" fill="#658085"/>
+    <rect x="102" y="178" width="250" height="12" rx="6" fill="#658085"/>
+    <g fill="#0f766e">
+      <rect x="102" y="238" width="300" height="80" rx="14"/>
+      <rect x="102" y="336" width="300" height="80" rx="14"/>
+      <rect x="102" y="434" width="300" height="80" rx="14"/>
+    </g>
+    <g fill="#f59e0b">
+      <circle cx="640" cy="506" r="54"/>
+      <circle cx="1060" cy="506" r="54"/>
+    </g>
+  </g>
+</svg>

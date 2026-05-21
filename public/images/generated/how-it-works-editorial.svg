@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">How It Works Editorial Visual</title>
+  <desc id="desc">Step-by-step fashion catalogue workflow from model input to final approved output.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#121a1d"/>
+      <stop offset="100%" stop-color="#223037"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="980" fill="url(#bg)"/>
+  <g transform="translate(120 110)">
+    <rect x="0" y="0" width="1360" height="760" rx="30" fill="#172227" stroke="#355155"/>
+    <g fill="#2dd4bf">
+      <circle cx="130" cy="130" r="38"/>
+      <circle cx="130" cy="350" r="38"/>
+      <circle cx="130" cy="570" r="38"/>
+    </g>
+    <path d="M130 170v142M130 390v142" stroke="#5bbcac" stroke-width="8" stroke-linecap="round"/>
+    <rect x="220" y="72" width="1030" height="120" rx="20" fill="#f5f8f8"/>
+    <rect x="220" y="292" width="1030" height="120" rx="20" fill="#f5f8f8"/>
+    <rect x="220" y="512" width="1030" height="176" rx="20" fill="#f5f8f8"/>
+    <rect x="260" y="108" width="270" height="18" rx="9" fill="#0f766e"/>
+    <rect x="260" y="334" width="320" height="18" rx="9" fill="#0f766e"/>
+    <rect x="260" y="554" width="380" height="18" rx="9" fill="#0f766e"/>
+    <rect x="260" y="585" width="640" height="12" rx="6" fill="#688083"/>
+    <rect x="260" y="610" width="720" height="12" rx="6" fill="#688083"/>
+    <rect x="260" y="635" width="560" height="12" rx="6" fill="#688083"/>
+  </g>
+</svg>

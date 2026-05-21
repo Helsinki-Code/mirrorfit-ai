@@ -24,17 +24,18 @@ export default function GenerationsPage() {
   }, [user]);
 
   return (
-    <div className="card p-4">
-      <h2 className="mb-3 text-lg font-semibold text-text-strong">Render History</h2>
+    <div className="panel p-5 md:p-6">
+      <p className="section-eyebrow">Generations</p>
+      <h2 className="mb-3 mt-1 text-xl font-semibold text-text-strong">Render History</h2>
       {generations.length === 0 ? (
-        <p className="text-sm text-muted">No generations yet.</p>
+        <div className="empty-state text-sm">No generations yet.</div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {generations.map((item) => (
-            <article key={item.id} className="rounded-md border border-border bg-surface p-3">
+            <article key={item.id} className="rounded-lg border border-border bg-surface p-3">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs text-muted">{item.id.slice(0, 10)}...</p>
-                <p className="text-xs capitalize text-text">{item.status}</p>
+                <span className="status-pill">{item.status}</span>
               </div>
               {item.outputUrl ? (
                 <Image
@@ -45,7 +46,7 @@ export default function GenerationsPage() {
                   className="h-auto w-full rounded-md border border-border object-cover"
                 />
               ) : (
-                <div className="flex h-48 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted">
+                <div className="empty-state flex h-48 items-center justify-center text-xs">
                   Pending output
                 </div>
               )}

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">Fashion AI Workflow Grid Visual</title>
+  <desc id="desc">Professional visual grid representing model references, garment inputs, and generated outputs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f2f6f6"/>
+      <stop offset="100%" stop-color="#e6edee"/>
+    </linearGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#eef3f4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="980" fill="url(#bg)"/>
+  <g transform="translate(130 110)">
+    <rect x="0" y="0" width="1340" height="760" rx="30" fill="#ffffff" stroke="#d4dfe1"/>
+    <rect x="46" y="44" width="400" height="310" rx="20" fill="url(#tile)" stroke="#d4dfe1"/>
+    <rect x="472" y="44" width="400" height="310" rx="20" fill="url(#tile)" stroke="#d4dfe1"/>
+    <rect x="898" y="44" width="396" height="310" rx="20" fill="url(#tile)" stroke="#d4dfe1"/>
+    <rect x="46" y="386" width="400" height="328" rx="20" fill="url(#tile)" stroke="#d4dfe1"/>
+    <rect x="472" y="386" width="822" height="328" rx="20" fill="#162226" stroke="#2d4242"/>
+  </g>
+  <g fill="#0f766e" opacity=".86">
+    <circle cx="325" cy="295" r="62"/>
+    <rect x="252" y="355" width="146" height="112" rx="54"/>
+  </g>
+  <g fill="#c08a32" opacity=".75">
+    <rect x="575" y="268" width="94" height="126" rx="16"/>
+    <rect x="692" y="248" width="94" height="146" rx="16"/>
+    <rect x="809" y="281" width="94" height="113" rx="16"/>
+  </g>
+  <g transform="translate(1048 208)">
+    <rect width="242" height="170" rx="16" fill="#0f766e" opacity=".84"/>
+    <rect x="24" y="22" width="194" height="18" rx="9" fill="#ffffff" opacity=".8"/>
+    <rect x="24" y="54" width="160" height="12" rx="6" fill="#d6f1eb"/>
+    <rect x="24" y="78" width="142" height="12" rx="6" fill="#d6f1eb"/>
+  </g>
+</svg>

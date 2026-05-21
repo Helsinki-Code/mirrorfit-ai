@@ -1,44 +1,57 @@
 @import "tailwindcss";
 
 :root {
-  --app: #f4f6fb;
+  --app: #f4f4f1;
   --panel: #ffffff;
-  --surface: #f0f3f9;
-  --hover: #e8edf6;
-  --text: #1f2736;
-  --text-strong: #0f1626;
-  --muted: #5c667d;
-  --border: #d8dfea;
-  --primary: #4a58e8;
-  --danger: #dc2626;
+  --surface: #eceee8;
+  --surface-strong: #e3e6df;
+  --hover: #e7e9e3;
+  --text: #1e2423;
+  --text-strong: #141919;
+  --muted: #677270;
+  --border: #d2d8d1;
+  --primary: #16557a;
+  --secondary: #8d6a2f;
+  --danger: #be123c;
+  --success: #0a7a50;
+  --warning: #a86a16;
 }
 
 @theme inline {
   --color-app: var(--app);
   --color-panel: var(--panel);
   --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
   --color-hover: var(--hover);
   --color-text: var(--text);
   --color-text-strong: var(--text-strong);
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
   --color-danger: var(--danger);
-  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --font-sans: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Cambria", "Times New Roman", Georgia, serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;
 }
 
 [data-theme="dark"] {
-  --app: #0b1220;
-  --panel: #111b2f;
-  --surface: #192640;
-  --hover: #213252;
-  --text: #dbe4f3;
-  --text-strong: #f4f7ff;
-  --muted: #9aa8c3;
-  --border: #2a3b5f;
-  --primary: #7787ff;
+  --app: #111414;
+  --panel: #161b1c;
+  --surface: #1f2526;
+  --surface-strong: #293133;
+  --hover: #313b3d;
+  --text: #d5dedb;
+  --text-strong: #edf4f1;
+  --muted: #96a8a3;
+  --border: #313a3c;
+  --primary: #58b6df;
+  --secondary: #cfaf6b;
   --danger: #fb7185;
+  --success: #51cb9e;
+  --warning: #d8a252;
 }
 
 body {
@@ -54,6 +67,11 @@ body {
 
 * {
   border-color: var(--border);
+  letter-spacing: 0;
+}
+
+main {
+  scroll-behavior: smooth;
 }
 
 input,
@@ -70,32 +88,172 @@ select {
 .card {
   border: 1px solid var(--border);
   background: var(--panel);
-  border-radius: 0.625rem;
-  box-shadow: 0 6px 20px rgba(13, 25, 49, 0.08);
+  border-radius: 0.5rem;
+  box-shadow: 0 12px 30px rgba(10, 18, 18, 0.08);
 }
 
 .subtle-input {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-strong);
-  border-radius: 0.625rem;
-  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  padding: 0.68rem 0.82rem;
   width: 100%;
+  transition: border-color 180ms ease, background-color 180ms ease;
 }
 
 .subtle-input:focus {
-  outline: 2px solid color-mix(in oklab, var(--primary) 60%, white 40%);
+  outline: 2px solid color-mix(in oklab, var(--primary) 66%, white 34%);
   outline-offset: 1px;
+  background: color-mix(in oklab, var(--panel) 72%, var(--surface) 28%);
 }
 
 .pill-btn {
   border: 1px solid var(--border);
-  border-radius: 0.625rem;
+  border-radius: 0.45rem;
   background: var(--surface);
   color: var(--text);
-  transition: background-color 200ms ease;
+  transition: background-color 200ms ease, border-color 200ms ease;
 }
 
 .pill-btn:hover {
   background: var(--hover);
+  border-color: color-mix(in oklab, var(--primary) 30%, var(--border) 70%);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 0.6rem;
+  box-shadow: 0 12px 26px rgba(10, 16, 18, 0.08);
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.section-eyebrow {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  font-weight: 700;
+}
+
+.status-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  line-height: 1.05rem;
+  background: color-mix(in oklab, var(--surface-strong) 64%, var(--panel) 36%);
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.thread-bubble {
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  padding: 0.74rem 0.84rem;
+  font-size: 0.9rem;
+}
+
+.thread-bubble-user {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.thread-bubble-assistant {
+  background: color-mix(in oklab, var(--primary) 10%, var(--panel) 90%);
+  border-color: color-mix(in oklab, var(--primary) 28%, var(--border) 72%);
+  color: var(--text-strong);
+}
+
+.action-chip {
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.73rem;
+  line-height: 1rem;
+  padding: 0.43rem 0.7rem;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.action-chip:hover {
+  background: var(--hover);
+  border-color: color-mix(in oklab, var(--primary) 30%, var(--border) 70%);
+}
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: 0.55rem;
+  padding: 1rem;
+  text-align: center;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--surface) 72%, var(--panel) 28%);
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 70%, white 30%);
+  outline-offset: 2px;
+}
+
+.editorial-title {
+  font-family: var(--font-serif);
+  letter-spacing: 0;
+}
+
+.app-canvas {
+  background:
+    radial-gradient(circle at 8% 2%, color-mix(in oklab, var(--secondary) 7%, transparent), transparent 40%),
+    radial-gradient(circle at 88% 8%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 45%),
+    var(--app);
+}
+
+.media-frame {
+  overflow: hidden;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in oklab, var(--border) 85%, var(--primary) 15%);
+  box-shadow: 0 14px 24px rgba(10, 16, 18, 0.12);
+}
+
+.media-frame img {
+  transition: transform 280ms ease;
+}
+
+.media-frame:hover img {
+  transform: scale(1.02);
+}
+
+.marketing-shell {
+  min-height: calc(100vh - 1px);
+  width: 100%;
+  max-width: 82rem;
+  margin-inline: auto;
+  padding: 1.2rem 1rem 2.8rem;
+}
+
+.marketing-header {
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--panel) 96%, var(--surface) 4%);
+  border-radius: 0.65rem;
+  padding: 0.72rem 0.84rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+  box-shadow: 0 10px 24px rgba(12, 17, 20, 0.08);
 }

@@ -19,8 +19,9 @@ export default function PromptRewritePage() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <section className="card p-4">
-        <h2 className="text-lg font-semibold text-text-strong">Smart Prompt Rewrite</h2>
+      <section className="panel p-5">
+        <p className="section-eyebrow">Advanced</p>
+        <h2 className="mt-1 text-lg font-semibold text-text-strong">Smart Prompt Rewrite</h2>
         <p className="mt-1 text-sm text-muted">
           Paste a casual request and get a production-grade catalogue prompt.
         </p>
@@ -32,9 +33,9 @@ export default function PromptRewritePage() {
         />
       </section>
 
-      <section className="card p-4">
+      <section className="panel p-5">
         <h3 className="text-base font-semibold text-text-strong">Rewritten Output</h3>
-        <div className="mt-3 rounded-md border border-border bg-surface p-3 text-sm text-text">
+        <div className="thread-bubble thread-bubble-assistant mt-3 text-sm">
           {raw.trim() ? rewritten : "Rewritten prompt appears here as you type."}
         </div>
       </section>

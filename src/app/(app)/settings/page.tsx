@@ -14,13 +14,14 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <section className="card p-4">
-        <h2 className="text-lg font-semibold text-text-strong">Theme Preferences</h2>
+      <section className="panel p-5">
+        <p className="section-eyebrow">Settings</p>
+        <h2 className="mt-1 text-lg font-semibold text-text-strong">Theme Preferences</h2>
         <p className="mt-1 text-sm text-muted">Theme applies globally across every app element.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            className="pill-btn px-4 py-2 text-sm"
+            className="focus-ring pill-btn px-4 py-2 text-sm"
             onClick={() => setTheme("light")}
             aria-pressed={theme === "light"}
           >
@@ -28,7 +29,7 @@ export default function SettingsPage() {
           </button>
           <button
             type="button"
-            className="pill-btn px-4 py-2 text-sm"
+            className="focus-ring pill-btn px-4 py-2 text-sm"
             onClick={() => setTheme("dark")}
             aria-pressed={theme === "dark"}
           >
@@ -37,7 +38,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card p-4">
+      <section className="panel p-5">
         <h2 className="text-lg font-semibold text-text-strong">Policy Confirmation</h2>
         <p className="mt-1 text-sm text-muted">
           Keep these confirmations active for compliant try-on generation.
@@ -56,7 +57,7 @@ export default function SettingsPage() {
 
         <button
           type="button"
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="focus-ring mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-60"
           disabled={saving}
           onClick={async () => {
             setSaving(true);
@@ -71,7 +72,7 @@ export default function SettingsPage() {
         >
           {saving ? "Updating..." : "Reconfirm Policy"}
         </button>
-        {message ? <p className="mt-2 text-sm text-emerald-600">{message}</p> : null}
+        {message ? <p className="mt-2 text-sm text-success">{message}</p> : null}
       </section>
     </div>
   );

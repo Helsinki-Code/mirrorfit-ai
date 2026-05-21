@@ -149,8 +149,9 @@ export default function ModelsPage() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-      <section className="card p-4">
-        <h2 className="text-lg font-semibold text-text-strong">My Models</h2>
+      <section className="panel p-5">
+        <p className="section-eyebrow">Model Library</p>
+        <h2 className="mt-1 text-lg font-semibold text-text-strong">My Models</h2>
         <p className="mt-1 text-sm text-muted">
           Keep it simple: create a model and upload face + front + side references.
         </p>
@@ -164,7 +165,7 @@ export default function ModelsPage() {
           />
           <button
             type="button"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="focus-ring rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
             onClick={createModel}
           >
             Save
@@ -172,7 +173,10 @@ export default function ModelsPage() {
         </div>
 
         <div className="mt-4 space-y-2">
-          {models.map((model) => (
+          {models.length === 0 ? (
+            <div className="empty-state text-sm">No models yet. Create your first profile.</div>
+          ) : (
+            models.map((model) => (
             <div
               key={model.id}
               className={`flex items-center justify-between rounded-md border px-3 py-2 ${
@@ -181,25 +185,27 @@ export default function ModelsPage() {
             >
               <button
                 type="button"
-                className="text-sm font-medium text-text"
+                className="focus-ring rounded-sm text-sm font-medium text-text"
                 onClick={() => setSelectedModelId(model.id)}
               >
                 {model.modelName}
               </button>
               <button
                 type="button"
-                className="text-xs text-red-500"
+                className="focus-ring rounded-sm text-xs text-red-500"
                 onClick={async () => deleteDoc(doc(db, "model_profiles", model.id))}
               >
                 Delete
               </button>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </section>
 
-      <section className="card p-4">
-        <h3 className="text-base font-semibold text-text-strong">Required references</h3>
+      <section className="panel p-5">
+        <p className="section-eyebrow">Consistency Inputs</p>
+        <h3 className="mt-1 text-base font-semibold text-text-strong">Required references</h3>
         <p className="mt-1 text-sm text-muted">
           Upload these 3 first for strong face/body lock. Use clear, neutral, well-lit photos (600x600+).
         </p>
@@ -219,12 +225,12 @@ export default function ModelsPage() {
             </label>
           ))}
         </div>
-        <p className={`mt-3 text-sm ${hasRequired ? "text-emerald-600" : "text-amber-600"}`}>
+        <p className={`mt-3 text-sm ${hasRequired ? "text-success" : "text-warning"}`}>
           {hasRequired
             ? "Model is generation-ready."
             : "Still waiting for one or more required references."}
         </p>
-        {info ? <p className="mt-2 text-sm text-emerald-600">{info}</p> : null}
+        {info ? <p className="mt-2 text-sm text-success">{info}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
       </section>
     </div>
