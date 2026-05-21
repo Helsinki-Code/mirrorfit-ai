@@ -155,6 +155,7 @@ export async function POST(request: Request) {
 
     const selectedModelProfileId = payload.modelProfileId ?? brandMemory?.preferredModelId;
     const selectedGarmentId = payload.garmentId;
+    const isPromptOnlyGarmentFlow = isBulkMode && !selectedGarmentId;
 
     let shootJobId = payload.shootJobId;
     if (!shootJobId) {
@@ -211,7 +212,7 @@ export async function POST(request: Request) {
 
     const missing: string[] = [];
     if (!selectedModelProfileId) missing.push("model");
-    if (!selectedGarmentId) missing.push("garment");
+    if (!selectedGarmentId && !isPromptOnlyGarmentFlow) missing.push("garment");
 
     if (missing.length > 0) {
       await updateDocSafe({
@@ -240,24 +241,26 @@ export async function POST(request: Request) {
     }
 
     const modelProfileId = selectedModelProfileId as string;
-    const garmentId = selectedGarmentId as string;
+    const garmentId = selectedGarmentId;
 
     const [modelSnap, garmentSnap, referencesSnap, garmentImagesSnap] = await Promise.all([
       adminDb.collection("model_profiles").doc(modelProfileId).get(),
-      adminDb.collection("garments").doc(garmentId).get(),
+      garmentId ? adminDb.collection("garments").doc(garmentId).get() : Promise.resolve(null),
       adminDb
         .collection("model_reference_images")
         .where("modelId", "==", modelProfileId)
         .where("userId", "==", user.uid)
         .get(),
-      adminDb
-        .collection("garment_images")
-        .where("garmentId", "==", garmentId)
-        .where("userId", "==", user.uid)
-        .get(),
+      garmentId
+        ? adminDb
+            .collection("garment_images")
+            .where("garmentId", "==", garmentId)
+            .where("userId", "==", user.uid)
+            .get()
+        : Promise.resolve(null),
     ]);
 
-    if (!modelSnap.exists || !garmentSnap.exists) {
+    if (!modelSnap.exists || (garmentId && (!garmentSnap || !garmentSnap.exists))) {
       await updateDocSafe({
         docRef: adminDb.collection("shoot_jobs").doc(shootJobId),
         collection: "shoot_jobs",
@@ -275,8 +278,8 @@ export async function POST(request: Request) {
     }
 
     const model = modelSnap.data() as ModelProfile;
-    const garment = garmentSnap.data() as Garment;
-    if (model.userId !== user.uid || garment.userId !== user.uid) {
+    const garment = garmentSnap?.data() as Garment | undefined;
+    if (model.userId !== user.uid || (garment && garment.userId !== user.uid)) {
       console.warn("tenant.forbidden_model_or_garment_access", {
         userId: user.uid,
         modelProfileId,
@@ -347,10 +350,12 @@ export async function POST(request: Request) {
       referencesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
       MODEL_REFERENCE_PRIORITY,
     );
-    const garmentReferencesSorted = sortByReferencePriority(
-      garmentImagesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
-      GARMENT_REFERENCE_PRIORITY,
-    );
+    const garmentReferencesSorted = garmentImagesSnap
+      ? sortByReferencePriority(
+          garmentImagesSnap.docs.map((doc) => doc.data() as ReferenceRecord),
+          GARMENT_REFERENCE_PRIORITY,
+        )
+      : [];
 
     const modelReferenceTypes = modelReferencesSorted
       .map((entry) => entry.imageType ?? "")
@@ -362,16 +367,18 @@ export async function POST(request: Request) {
     const hasFace = modelReferenceTypes.includes("face");
     const hasFrontBody = modelReferenceTypes.includes("front_body");
     const hasSideBody = modelReferenceTypes.includes("side_body");
+    const needsGarmentReference = Boolean(garmentId);
     const hasPrimaryGarment =
       garmentReferenceTypes.includes("front") || garmentReferenceTypes.includes("flat_lay");
 
-    if (!hasFace || !hasFrontBody || !hasSideBody || !hasPrimaryGarment) {
+    if (!hasFace || !hasFrontBody || !hasSideBody || (needsGarmentReference && !hasPrimaryGarment)) {
       const missingModelRefs = [
         !hasFace ? "face" : null,
         !hasFrontBody ? "front_body" : null,
         !hasSideBody ? "side_body" : null,
       ].filter((value): value is string => Boolean(value));
-      const missingGarmentRefs = !hasPrimaryGarment ? ["front_or_flat_lay"] : [];
+      const missingGarmentRefs =
+        needsGarmentReference && !hasPrimaryGarment ? ["front_or_flat_lay"] : [];
       const missingDetail = [...missingModelRefs, ...missingGarmentRefs];
       const message = missingDetail.length
         ? `I could not complete this render yet. Missing required references for current selection: ${missingDetail.join(", ")}.`
@@ -418,7 +425,20 @@ export async function POST(request: Request) {
     const basePrompt = buildGenerationPrompt({
       request: payload,
       model,
-      garment,
+      garment:
+        garment ??
+        ({
+          id: "prompt-only",
+          userId: user.uid,
+          productName: "prompt-defined outfit",
+          sku: "PROMPT-ONLY",
+          category: "other",
+          fabric: "as described by user",
+          color: "as described by user",
+          notes: "Bulk prompt-only outfit mode",
+          createdAt: nowUnixMs(),
+          updatedAt: nowUnixMs(),
+        } satisfies Garment),
       referenceImageCount: modelReferenceUrls.length,
       referenceImageUrls: modelReferenceUrls,
       garmentImageUrls: garmentReferenceUrls,
@@ -435,7 +455,7 @@ export async function POST(request: Request) {
       id: generationId,
       userId: user.uid,
       modelProfileId,
-      garmentId,
+      garmentId: garmentId ?? "prompt-only",
       prompt: payload.userMessage,
       style: "auto",
       background: "auto",
@@ -481,6 +501,7 @@ export async function POST(request: Request) {
         garmentReferenceTypes,
         garmentReferenceUrls,
       },
+      requireGarmentReference: needsGarmentReference,
       retryCap: routeRetryCap,
     });
 

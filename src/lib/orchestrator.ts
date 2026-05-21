@@ -16,6 +16,7 @@ type OrchestratorInput = {
   request: CreateGenerationRequest;
   basePrompt: string;
   packedReferences: PackedReferences;
+  requireGarmentReference?: boolean;
   retryCap?: number;
 };
 
@@ -77,6 +78,7 @@ function modelRouter(attempt: number) {
 
 function consistencyJudge(params: {
   packed: PackedReferences;
+  requireGarmentReference: boolean;
   engineId: string;
   prompt: string;
   hadError: boolean;
@@ -90,7 +92,11 @@ function consistencyJudge(params: {
 
   const faceIdentity = hasFace ? 0.9 : 0.22;
   const bodyConsistency = hasFrontBody && hasSideBody ? 0.88 : 0.3;
-  const garmentFidelity = hasPrimaryGarment ? 0.84 : 0.36;
+  const garmentFidelity = hasPrimaryGarment
+    ? 0.84
+    : params.requireGarmentReference
+      ? 0.36
+      : 0.72;
   const catalogSuitability =
     params.engineId === ENGINE_ORDER[0] ? 0.86 : params.engineId === ENGINE_ORDER[1] ? 0.82 : 0.75;
   const requiredModelRefs = [hasFace, hasFrontBody, hasSideBody].filter(Boolean).length;
@@ -136,12 +142,13 @@ function referencePackForAttempt(packed: PackedReferences, attempt: number) {
   };
 }
 
-function missingRequiredRefs(packed: PackedReferences) {
+function missingRequiredRefs(packed: PackedReferences, requireGarmentReference: boolean) {
   const missing: string[] = [];
   if (!packed.modelReferenceTypes.includes("face")) missing.push("face");
   if (!packed.modelReferenceTypes.includes("front_body")) missing.push("front_body");
   if (!packed.modelReferenceTypes.includes("side_body")) missing.push("side_body");
   if (
+    requireGarmentReference &&
     !packed.garmentReferenceTypes.includes("front") &&
     !packed.garmentReferenceTypes.includes("flat_lay")
   ) {
@@ -208,6 +215,7 @@ export async function runGenerationOrchestrator(
   userFacingMessage: string;
 }> {
   const retryCap = input.retryCap ?? DEFAULT_RETRY_CAP;
+  const requireGarmentReference = input.requireGarmentReference ?? true;
   const cleanedPrompt = intentCleaner(input.request.userMessage);
   const strictPrompt = `${input.basePrompt}
 User intent: ${cleanedPrompt}
@@ -221,7 +229,7 @@ Output must remain tasteful, adult, and product-catalog focused.`;
   let workingPrompt = strictPrompt;
   const attempts: GenerationAttempt[] = [];
   let bestAttempt: GenerationAttempt | null = null;
-  const missingRefs = missingRequiredRefs(input.packedReferences);
+  const missingRefs = missingRequiredRefs(input.packedReferences, requireGarmentReference);
 
   for (let attempt = 1; attempt <= retryCap; attempt += 1) {
     const engineId = modelRouter(attempt);
@@ -240,6 +248,7 @@ Output must remain tasteful, adult, and product-catalog focused.`;
 
     const score = consistencyJudge({
       packed: input.packedReferences,
+      requireGarmentReference,
       engineId,
       prompt: workingPrompt,
       hadError: Boolean(blockedReason),

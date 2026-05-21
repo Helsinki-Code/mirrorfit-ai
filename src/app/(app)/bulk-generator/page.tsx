@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db } from "@/lib/firebase/client";
@@ -81,6 +81,33 @@ export default function BulkGeneratorPage() {
   const [results, setResults] = useState<BulkResult[]>([]);
   const [progressLabel, setProgressLabel] = useState("");
   const [error, setError] = useState("");
+  const [stopRequested, setStopRequested] = useState(false);
+  const stopRequestedRef = useRef(false);
+
+  const requestStopGeneration = () => {
+    stopRequestedRef.current = true;
+    setStopRequested(true);
+    setProgressLabel("Stop requested. Finishing current request and halting queue...");
+  };
+
+  const downloadGeneratedImage = async (imageUrl: string, filename: string) => {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error("Failed to download image.");
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -123,6 +150,8 @@ export default function BulkGeneratorPage() {
 
   const runBulkGeneration = async () => {
     if (!user) return;
+    stopRequestedRef.current = false;
+    setStopRequested(false);
     setError("");
     setResults([]);
 
@@ -140,9 +169,12 @@ export default function BulkGeneratorPage() {
       let count = 0;
 
       for (const outfit of parsedOutfitRows) {
+        if (stopRequestedRef.current) break;
         const effectiveGarmentId = outfit.garmentId;
         for (let poseIndex = 1; poseIndex <= posesPerOutfit; poseIndex += 1) {
+          if (stopRequestedRef.current) break;
           for (let imageIndex = 1; imageIndex <= imagesPerPose; imageIndex += 1) {
+            if (stopRequestedRef.current) break;
             count += 1;
             setProgressLabel(
               `Agent is generating ${count}/${estimatedJobs}: "${outfit.outfitText}" • pose ${poseIndex} • image ${imageIndex}`,
@@ -160,6 +192,10 @@ export default function BulkGeneratorPage() {
             let retries = 0;
 
             while (!finalized && retries < 4) {
+              if (stopRequestedRef.current) {
+                finalized = true;
+                break;
+              }
               const response = await fetch("/api/generations", {
                 method: "POST",
                 headers: {
@@ -199,6 +235,9 @@ export default function BulkGeneratorPage() {
                   `Agent paused for rate limit. Retrying in ${Math.round(waitMs / 1000)}s...`,
                 );
                 await sleep(waitMs);
+                if (stopRequestedRef.current) {
+                  finalized = true;
+                }
                 continue;
               }
 
@@ -234,12 +273,17 @@ export default function BulkGeneratorPage() {
               ]);
             }
 
+            if (stopRequestedRef.current) break;
             setProgressLabel("Agent waiting briefly before next generation to respect model limits...");
             await sleep(BULK_GENERATION_GAP_MS);
           }
         }
       }
-      setProgressLabel("Agent completed the bulk generation run.");
+      if (stopRequestedRef.current) {
+        setProgressLabel("Bulk generation stopped by user.");
+      } else {
+        setProgressLabel("Agent completed the bulk generation run.");
+      }
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "Bulk run failed.");
     } finally {
@@ -420,14 +464,24 @@ export default function BulkGeneratorPage() {
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-xs text-muted">Estimated generations: {estimatedJobs}</p>
-            <button
-              type="button"
-              onClick={runBulkGeneration}
-              disabled={running}
-              className="focus-ring rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {running ? "Agent running..." : "Run Bulk Generation"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={runBulkGeneration}
+                disabled={running}
+                className="focus-ring rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {running ? "Agent running..." : "Run Bulk Generation"}
+              </button>
+              <button
+                type="button"
+                onClick={requestStopGeneration}
+                disabled={!running || stopRequested}
+                className="focus-ring rounded-md border border-border bg-panel px-4 py-2 text-sm font-medium text-text disabled:opacity-50"
+              >
+                {stopRequested ? "Stopping..." : "Stop Generation"}
+              </button>
+            </div>
           </div>
           {progressLabel ? <p className="mt-2 text-xs text-muted">{progressLabel}</p> : null}
           {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
@@ -519,14 +573,41 @@ export default function BulkGeneratorPage() {
                   </div>
                 ) : null}
                 <p className="mt-2 text-xs text-text">{result.message}</p>
-                {result.shootJobId ? (
-                  <Link
-                    href={`/studio?job=${result.shootJobId}`}
-                    className="mt-2 inline-flex rounded-md border border-border bg-panel px-3 py-1.5 text-xs text-text hover:bg-hover"
-                  >
-                    Open thread
-                  </Link>
-                ) : null}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {result.outputUrl ? (
+                    <button
+                      type="button"
+                      className="inline-flex rounded-md border border-border bg-panel px-3 py-1.5 text-xs text-text hover:bg-hover"
+                      onClick={() => {
+                        const safeOutfit = result.outfitText
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-")
+                          .replace(/^-+|-+$/g, "")
+                          .slice(0, 48);
+                        const filename = `mirrorfit-${safeOutfit || "outfit"}-pose-${result.poseIndex}-image-${result.imageIndex}.png`;
+                        void downloadGeneratedImage(result.outputUrl as string, filename).catch(
+                          (downloadError: unknown) => {
+                            setError(
+                              downloadError instanceof Error
+                                ? downloadError.message
+                                : "Could not download image.",
+                            );
+                          },
+                        );
+                      }}
+                    >
+                      Download
+                    </button>
+                  ) : null}
+                  {result.shootJobId ? (
+                    <Link
+                      href={`/studio?job=${result.shootJobId}`}
+                      className="inline-flex rounded-md border border-border bg-panel px-3 py-1.5 text-xs text-text hover:bg-hover"
+                    >
+                      Open thread
+                    </Link>
+                  ) : null}
+                </div>
               </article>
             ))
           )}
