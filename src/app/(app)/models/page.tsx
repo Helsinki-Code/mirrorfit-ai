@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import {
   collection,
@@ -11,7 +12,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import type { ModelProfile, ModelReferenceImage, ReferenceImageType } from "@/lib/types";
@@ -88,7 +89,11 @@ export default function ModelsPage() {
     setSelectedModelId(id);
   };
 
-  const uploadReference = async (type: ReferenceImageType, file: File) => {
+  const uploadReference = async (
+    type: ReferenceImageType,
+    file: File,
+    replaceRef?: ModelReferenceImage,
+  ) => {
     if (!user || !selectedModelId) return;
     setError("");
     setInfo("");
@@ -136,9 +141,27 @@ export default function ModelsPage() {
         createdAt: nowUnixMs(),
       };
       await setDoc(doc(db, "model_reference_images", id), row);
-      setInfo(`${type.replace("_", " ")} uploaded.`);
+
+      if (replaceRef) {
+        await deleteDoc(doc(db, "model_reference_images", replaceRef.id));
+        await deleteObject(ref(storage, replaceRef.storagePath));
+        setInfo(`${type.replace("_", " ")} replaced.`);
+      } else {
+        setInfo(`${type.replace("_", " ")} uploaded.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
+    }
+  };
+
+  const deleteReference = async (item: ModelReferenceImage) => {
+    try {
+      await deleteDoc(doc(db, "model_reference_images", item.id));
+      await deleteObject(ref(storage, item.storagePath));
+      setInfo(`${item.imageType.replace("_", " ")} deleted.`);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
     }
   };
 
@@ -232,6 +255,64 @@ export default function ModelsPage() {
         </p>
         {info ? <p className="mt-2 text-sm text-success">{info}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
+
+        <div className="mt-4">
+          <h4 className="text-sm font-semibold text-text-strong">Uploaded References</h4>
+          <div className="mt-2 grid gap-2">
+            {selectedRefs.length === 0 ? (
+              <div className="empty-state text-sm">No references uploaded for this model yet.</div>
+            ) : (
+              selectedRefs.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-md border border-border bg-surface p-2.5"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                      {item.imageType.replace("_", " ")}
+                    </p>
+                    <div className="flex gap-1.5">
+                      <a
+                        href={item.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="pill-btn px-2 py-1 text-xs"
+                      >
+                        View
+                      </a>
+                      <label className="pill-btn cursor-pointer px-2 py-1 text-xs">
+                        Replace
+                        <input
+                          className="hidden"
+                          type="file"
+                          accept="image/*"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) void uploadReference(item.imageType, file, item);
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="pill-btn px-2 py-1 text-xs text-red-500"
+                        onClick={async () => deleteReference(item)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <Image
+                    src={item.downloadUrl}
+                    alt={`Model reference ${item.imageType.replace("_", " ")}`}
+                    width={480}
+                    height={620}
+                    className="h-auto w-full rounded-md border border-border object-cover"
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );

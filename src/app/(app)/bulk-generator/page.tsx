@@ -3,10 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db } from "@/lib/firebase/client";
+import { storage } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
-import type { Garment, ModelProfile } from "@/lib/types";
+import type { Garment, GarmentImage, ModelProfile } from "@/lib/types";
+import { buildStoragePath } from "@/lib/utils/storage";
+import { nowUnixMs } from "@/lib/utils/time";
 
 type OutfitRow = {
   id: string;
@@ -24,6 +28,19 @@ type BulkResult = {
   outputUrl?: string;
   shootJobId?: string;
 };
+
+type UploadedOutfitImage = {
+  id: string;
+  garmentId: string;
+  name: string;
+  downloadUrl: string;
+};
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const BULK_GENERATION_GAP_MS = 2200;
 
 function parseOutfitCsv(csv: string): OutfitRow[] {
   const rows = csv
@@ -61,6 +78,7 @@ export default function BulkGeneratorPage() {
   const [imagesPerPose, setImagesPerPose] = useState(2);
   const [outfitTextList, setOutfitTextList] = useState("");
   const [csvText, setCsvText] = useState("");
+  const [uploadedOutfitImages, setUploadedOutfitImages] = useState<UploadedOutfitImage[]>([]);
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<BulkResult[]>([]);
   const [progressLabel, setProgressLabel] = useState("");
@@ -106,8 +124,13 @@ export default function BulkGeneratorPage() {
       }));
 
     const csvRows = parseOutfitCsv(csvText);
-    return [...manualRows, ...csvRows];
-  }, [csvText, outfitTextList]);
+    const imageRows = uploadedOutfitImages.map((item) => ({
+      id: item.id,
+      outfitText: `Use the uploaded outfit image: ${item.name}`,
+      garmentId: item.garmentId,
+    }));
+    return [...manualRows, ...csvRows, ...imageRows];
+  }, [csvText, outfitTextList, uploadedOutfitImages]);
 
   const estimatedJobs = parsedOutfitRows.length * posesPerOutfit * imagesPerPose;
 
@@ -151,49 +174,86 @@ export default function BulkGeneratorPage() {
               "Keep output commercially clean and catalogue-ready.",
             ].join(" ");
 
-            const response = await fetch("/api/generations", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                modelProfileId: modelId,
-                garmentId: effectiveGarmentId,
-                userMessage,
-              }),
-            });
+            let finalized = false;
+            let retries = 0;
 
-            const raw = await response.text();
-            let data: {
-              status?: string;
-              outputUrl?: string;
-              shootJobId?: string;
-              message?: string;
-              error?: string;
-            } = {};
+            while (!finalized && retries < 4) {
+              const response = await fetch("/api/generations", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                  "x-mirrorfit-mode": "bulk",
+                },
+                body: JSON.stringify({
+                  modelProfileId: modelId,
+                  garmentId: effectiveGarmentId,
+                  userMessage,
+                }),
+              });
 
-            try {
-              data = JSON.parse(raw) as typeof data;
-            } catch {
-              data = { error: raw || "Unexpected response." };
+              const raw = await response.text();
+              let data: {
+                status?: string;
+                outputUrl?: string;
+                shootJobId?: string;
+                message?: string;
+                error?: string;
+              } = {};
+
+              try {
+                data = JSON.parse(raw) as typeof data;
+              } catch {
+                data = { error: raw || "Unexpected response." };
+              }
+
+              if (response.status === 429) {
+                retries += 1;
+                const retryAfterSeconds = Number(response.headers.get("Retry-After") ?? "8");
+                const waitMs = Number.isFinite(retryAfterSeconds)
+                  ? Math.max(1, retryAfterSeconds) * 1000
+                  : 8000;
+                setProgressLabel(
+                  `Agent paused for rate limit. Retrying in ${Math.round(waitMs / 1000)}s...`,
+                );
+                await sleep(waitMs);
+                continue;
+              }
+
+              const ok = response.ok && data.status === "completed" && data.outputUrl;
+              const result: BulkResult = {
+                key: `${outfit.id}-${poseIndex}-${imageIndex}`,
+                outfitText: outfit.outfitText,
+                poseIndex,
+                imageIndex,
+                status: ok ? "completed" : "failed",
+                message: ok
+                  ? data.message ?? "Completed."
+                  : data.error ?? data.message ?? `Failed (${response.status}).`,
+                outputUrl: data.outputUrl,
+                shootJobId: data.shootJobId,
+              };
+
+              setResults((current) => [result, ...current]);
+              finalized = true;
             }
 
-            const ok = response.ok && data.status === "completed" && data.outputUrl;
-            const result: BulkResult = {
-              key: `${outfit.id}-${poseIndex}-${imageIndex}`,
-              outfitText: outfit.outfitText,
-              poseIndex,
-              imageIndex,
-              status: ok ? "completed" : "failed",
-              message: ok
-                ? data.message ?? "Completed."
-                : data.error ?? data.message ?? `Failed (${response.status}).`,
-              outputUrl: data.outputUrl,
-              shootJobId: data.shootJobId,
-            };
+            if (!finalized) {
+              setResults((current) => [
+                {
+                  key: `${outfit.id}-${poseIndex}-${imageIndex}`,
+                  outfitText: outfit.outfitText,
+                  poseIndex,
+                  imageIndex,
+                  status: "failed",
+                  message: "Failed after repeated rate-limit retries.",
+                },
+                ...current,
+              ]);
+            }
 
-            setResults((current) => [result, ...current]);
+            setProgressLabel("Agent waiting briefly before next generation to respect model limits...");
+            await sleep(BULK_GENERATION_GAP_MS);
           }
         }
       }
@@ -202,6 +262,70 @@ export default function BulkGeneratorPage() {
       setError(runError instanceof Error ? runError.message : "Bulk run failed.");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const uploadCsvFile = async (file: File) => {
+    const content = await file.text();
+    setCsvText(content);
+  };
+
+  const uploadOutfitImages = async (files: FileList | null) => {
+    if (!user || !files || files.length === 0) return;
+    setError("");
+
+    const uploaded: UploadedOutfitImage[] = [];
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
+        const garmentId = crypto.randomUUID();
+        const imageId = crypto.randomUUID();
+        const now = nowUnixMs();
+        const ext = file.name.split(".").pop() || "jpg";
+        const storagePath = buildStoragePath([
+          "users",
+          user.uid,
+          "garments",
+          garmentId,
+          `front_${imageId}.${ext}`,
+        ]);
+
+        await setDoc(doc(db, "garments", garmentId), {
+          id: garmentId,
+          userId: user.uid,
+          productName: file.name.replace(/\.[^.]+$/, "") || `Uploaded Outfit ${uploadedOutfitImages.length + uploaded.length + 1}`,
+          sku: `BULK-${garmentId.slice(0, 8).toUpperCase()}`,
+          category: "other",
+          fabric: "",
+          color: "",
+          notes: "Created from bulk outfit image upload",
+          createdAt: now,
+          updatedAt: now,
+        } satisfies Garment);
+
+        await uploadBytes(ref(storage, storagePath), file, { contentType: file.type });
+        const downloadUrl = await getDownloadURL(ref(storage, storagePath));
+
+        await setDoc(doc(db, "garment_images", imageId), {
+          id: imageId,
+          garmentId,
+          userId: user.uid,
+          imageType: "front",
+          storagePath,
+          downloadUrl,
+          createdAt: now,
+        } satisfies GarmentImage);
+
+        uploaded.push({
+          id: imageId,
+          garmentId,
+          name: file.name,
+          downloadUrl,
+        });
+      }
+      setUploadedOutfitImages((current) => [...current, ...uploaded]);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload outfit images.");
     }
   };
 
@@ -290,6 +414,36 @@ export default function BulkGeneratorPage() {
             value={csvText}
             onChange={(event) => setCsvText(event.target.value)}
           />
+          <div className="mt-2 rounded-md border border-border bg-surface p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Upload CSV File</p>
+            <input
+              className="subtle-input mt-2"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadCsvFile(file);
+              }}
+            />
+          </div>
+
+          <div className="mt-3 rounded-md border border-border bg-surface p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Upload Outfit Images (Any Number)
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Agent will use these images as exact outfit references.
+            </p>
+            <input
+              className="subtle-input mt-2"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                void uploadOutfitImages(event.target.files);
+              }}
+            />
+          </div>
 
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-xs text-muted">Estimated generations: {estimatedJobs}</p>
@@ -328,6 +482,32 @@ export default function BulkGeneratorPage() {
               ))
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="panel p-5">
+        <h3 className="text-base font-semibold text-text-strong">Uploaded Outfit References</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {uploadedOutfitImages.length === 0 ? (
+            <div className="empty-state text-sm md:col-span-2 xl:col-span-4">
+              No outfit images uploaded yet.
+            </div>
+          ) : (
+            uploadedOutfitImages.map((item) => (
+              <article key={item.id} className="rounded-md border border-border bg-surface p-2.5">
+                <p className="truncate text-xs text-muted">{item.name}</p>
+                <div className="media-frame mt-2">
+                  <Image
+                    src={item.downloadUrl}
+                    alt={`Uploaded outfit reference image ${item.name}`}
+                    width={420}
+                    height={560}
+                    className="h-auto w-full object-cover"
+                  />
+                </div>
+              </article>
+            ))
+          )}
         </div>
       </section>
 

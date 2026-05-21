@@ -119,14 +119,23 @@ export async function POST(request: Request) {
     const user = await requireServerUser();
     const adminDb = getAdminDb();
     const adminStorage = getAdminStorage();
+    const requestMode = request.headers.get("x-mirrorfit-mode") ?? "single";
+    const isBulkMode = requestMode === "bulk";
+    const bulkLimitRaw = Number(process.env.BULK_GENERATION_RATE_LIMIT_MAX ?? "120");
+    const bulkMaxRequests =
+      Number.isFinite(bulkLimitRaw) && bulkLimitRaw > 0 ? Math.floor(bulkLimitRaw) : 120;
+    const maxRequests = isBulkMode ? bulkMaxRequests : 8;
 
     const rateLimit = checkRateLimit({
       key: `gen:${user.uid}`,
       windowMs: 60_000,
-      maxRequests: 8,
+      maxRequests,
     });
     if (!rateLimit.allowed) {
-      return NextResponse.json({ error: "Rate limit exceeded." }, { status: 429 });
+      return NextResponse.json(
+        { error: "Rate limit exceeded.", mode: requestMode },
+        { status: 429, headers: { "Retry-After": "8" } },
+      );
     }
 
     const parsed = requestSchema.safeParse(await request.json());

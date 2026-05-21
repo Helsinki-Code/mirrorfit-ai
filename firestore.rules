@@ -123,9 +123,13 @@ service cloud.firestore {
     }
 
     match /brand_memories/{id} {
-      allow read, delete: if signedIn() && existingOwnerMatches();
-      allow create: if signedIn() && ownerFieldMatches();
-      allow update: if signedIn() && existingOwnerMatches() && ownerUnchanged();
+      allow read: if signedIn() && id == request.auth.uid;
+      allow delete: if signedIn() && existingOwnerMatches();
+      allow create: if signedIn() && id == request.auth.uid && ownerFieldMatches();
+      allow update: if signedIn()
+        && id == request.auth.uid
+        && existingOwnerMatches()
+        && ownerUnchanged();
     }
 
     match /shoot_approvals/{id} {

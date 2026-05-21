@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import type { CreateGarmentInput, Garment, GarmentCategory, GarmentImage } from "@/lib/types";
@@ -36,6 +37,8 @@ export default function GarmentsPage() {
   const [imageType, setImageType] = useState<GarmentImage["imageType"]>("front");
   const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [garmentImages, setGarmentImages] = useState<GarmentImage[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -46,6 +49,18 @@ export default function GarmentsPage() {
       setGarments(items);
       setSelectedGarmentId((prev) => prev || items[0]?.id || "");
     });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    return onSnapshot(
+      query(collection(db, "garment_images"), where("userId", "==", user.uid)),
+      (snapshot) => {
+        const rows = snapshot.docs.map((entry) => entry.data() as GarmentImage);
+        rows.sort((a, b) => b.createdAt - a.createdAt);
+        setGarmentImages(rows);
+      },
+    );
   }, [user]);
 
   const createGarment = async () => {
@@ -64,9 +79,10 @@ export default function GarmentsPage() {
     setShowDetails(false);
   };
 
-  const uploadGarmentImage = async (file: File) => {
+  const uploadGarmentImage = async (file: File, replaceImage?: GarmentImage) => {
     if (!user || !selectedGarmentId) return;
     setError("");
+    setInfo("");
     try {
       const imageId = crypto.randomUUID();
       const ext = file.name.split(".").pop() ?? "jpg";
@@ -90,10 +106,31 @@ export default function GarmentsPage() {
         downloadUrl,
         createdAt: nowUnixMs(),
       } satisfies GarmentImage);
+
+      if (replaceImage) {
+        await deleteDoc(doc(db, "garment_images", replaceImage.id));
+        await deleteObject(ref(storage, replaceImage.storagePath));
+        setInfo(`${replaceImage.imageType.replace("_", " ")} image replaced.`);
+      } else {
+        setInfo(`${imageType.replace("_", " ")} image uploaded.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     }
   };
+
+  const deleteGarmentImage = async (image: GarmentImage) => {
+    try {
+      await deleteDoc(doc(db, "garment_images", image.id));
+      await deleteObject(ref(storage, image.storagePath));
+      setInfo(`${image.imageType.replace("_", " ")} image deleted.`);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    }
+  };
+
+  const selectedGarmentImages = garmentImages.filter((item) => item.garmentId === selectedGarmentId);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
@@ -210,8 +247,68 @@ export default function GarmentsPage() {
                 if (file) void uploadGarmentImage(file);
               }}
             />
+            {info ? <p className="text-sm text-success">{info}</p> : null}
             {error ? <p className="text-sm text-red-500">{error}</p> : null}
           </div>
+        </div>
+
+        <div className="panel p-5">
+          <h3 className="mb-2 text-base font-semibold text-text-strong">Uploaded Garment Images</h3>
+          {selectedGarmentId ? (
+            <div className="space-y-2">
+              {selectedGarmentImages.length === 0 ? (
+                <div className="empty-state text-sm">No images uploaded for this garment yet.</div>
+              ) : (
+                selectedGarmentImages.map((item) => (
+                  <div key={item.id} className="rounded-md border border-border bg-surface p-2.5">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                        {item.imageType.replace("_", " ")}
+                      </p>
+                      <div className="flex gap-1.5">
+                        <a
+                          href={item.downloadUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="pill-btn px-2 py-1 text-xs"
+                        >
+                          View
+                        </a>
+                        <label className="pill-btn cursor-pointer px-2 py-1 text-xs">
+                          Replace
+                          <input
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) void uploadGarmentImage(file, item);
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="pill-btn px-2 py-1 text-xs text-red-500"
+                          onClick={async () => deleteGarmentImage(item)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    <Image
+                      src={item.downloadUrl}
+                      alt={`Garment reference ${item.imageType.replace("_", " ")}`}
+                      width={480}
+                      height={620}
+                      className="h-auto w-full rounded-md border border-border object-cover"
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div className="empty-state text-sm">Select a garment to view its uploaded images.</div>
+          )}
         </div>
 
         <div className="panel p-5">
